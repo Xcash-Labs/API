@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"time"
-	
+
 	"math"
 
 	"github.com/gofiber/fiber/v2"
@@ -290,10 +290,16 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
     // --- 1) Current block height via local RPC ---
     var rpcResp rpcGetBlockCount
     body, httpErr := send_http_data("http://127.0.0.1:18281/json_rpc", `{"jsonrpc":"2.0","id":"0","method":"get_block_count"}`)
-    if httpErr != nil || !strings.Contains(body, `"result"`) || json.Unmarshal([]byte(body), &rpcResp) != nil {
-        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+
+	fmt.Println("body:", body)
+
+	if httpErr != nil || !strings.Contains(body, `"result"`) || json.Unmarshal([]byte(body), &rpcResp) != nil {
+        return c.JSON(ErrorResults{"Could not get blockcount from server"})
     }
     height := rpcResp.Result.Count
+
+
+
 
     // --- 2) Totals from delegates (count, online_count, totalVotes) ---
     totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
