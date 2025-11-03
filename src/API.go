@@ -19,7 +19,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	mongoClient, mongoClienterror = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://127.0.0.1:27017/?directConnection=true&tls=true"))
+	mongoClient, mongoClienterror = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://127.0.0.1:27017/?directConnection=true"))
 	if mongoClienterror != nil {
 		os.Exit(0)
 	}
