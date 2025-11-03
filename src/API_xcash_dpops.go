@@ -254,6 +254,234 @@ func v1_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 	return c.JSON(output)
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
+    type rpcGetBlockCount struct {
+        Result struct {
+            Count int `json:"count"`
+        } `json:"result"`
+    }
+
+    // --- Collections ---
+    db := mongoClient.Database(XCASH_DPOPS_DATABASE)
+    colDelegates := db.Collection("delegates")
+    colStats := db.Collection("statistics")
+
+    ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+    defer cancel()
+
+    // --- 1) Current block height via local RPC ---
+    var rpcResp rpcGetBlockCount
+    body, httpErr := send_http_data("http://127.0.0.1:18281/json_rpc", `{"jsonrpc":"2.0","id":"0","method":"get_block_count"}`)
+    if httpErr != nil || !strings.Contains(body, `"result"`) || json.Unmarshal([]byte(body), &rpcResp) != nil {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+    height := rpcResp.Result.Count
+
+    // --- 2) Totals from delegates (count, online_count, totalVotes) ---
+    totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
+    if err != nil {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+
+    onlineCount, err := colDelegates.CountDocuments(ctx, bson.D{{Key: "online_status", Value: "true"}})
+    if err != nil {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+
+    // Sum total_vote_count across all delegates (stored as NumberLong)
+    // Use aggregation to avoid pulling all docs to the app
+    var sumAgg []bson.M
+    cur, err := colDelegates.Aggregate(ctx, mongo.Pipeline{
+        {{"$group", bson.D{{"_id", nil}, {"total", bson.D{{"$sum", "$total_vote_count"}}}}}},
+    })
+    if err != nil {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+    if err = cur.All(ctx, &sumAgg); err != nil || len(sumAgg) == 0 {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+    totalVotes := toInt64(sumAgg[0]["total"])
+
+    // --- 3) Most verifier rounds (statistics) ---
+    var topVerifier bson.M
+    if err := colStats.FindOne(ctx,
+        bson.D{},
+        options.FindOne().
+            SetSort(bson.D{{Key: "block_verifier_total_rounds", Value: -1}}).
+            SetProjection(bson.D{{Key: "_id", Value: 1}, {Key: "block_verifier_total_rounds", Value: 1}}),
+    ).Decode(&topVerifier); err != nil {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+    topVerifierKey := asString(topVerifier["_id"])
+    mostTotalRounds := int(toInt64(topVerifier["block_verifier_total_rounds"]))
+    var topVerifierDelegate bson.M
+    _ = colDelegates.FindOne(ctx, bson.D{{Key: "public_key", Value: topVerifierKey}},
+        options.FindOne().SetProjection(bson.D{{Key: "delegate_name", Value: 1}, {"_id", 0}})).
+        Decode(&topVerifierDelegate)
+    mostTotalRoundsDelegateName := asString(topVerifierDelegate["delegate_name"])
+
+    // --- 4) Best online % (statistics) = block_verifier_online_total_rounds / block_verifier_total_rounds ---
+    // Pull minimal fields and compute in-app
+    bestPctName := ""
+    bestPct := 0
+    {
+        proj := options.Find().SetProjection(bson.D{
+            {"_id", 1},
+            {"block_verifier_online_total_rounds", 1},
+            {"block_verifier_total_rounds", 1},
+        })
+        sCur, err := colStats.Find(ctx, bson.D{}, proj)
+        if err != nil {
+            return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+        }
+        defer sCur.Close(ctx)
+        for sCur.Next(ctx) {
+            var d bson.M
+            if err := sCur.Decode(&d); err != nil { continue }
+            total := toInt64(d["block_verifier_total_rounds"])
+            online := toInt64(d["block_verifier_online_total_rounds"])
+            if total <= 0 { continue }
+            pct := int(math.Round((float64(online) / float64(total)) * 100.0))
+            if pct > bestPct {
+                bestPct = pct
+                // map _id(public_key) -> delegate name
+                var del bson.M
+                _ = colDelegates.FindOne(ctx, bson.D{{Key: "public_key", Value: asString(d["_id"])}},
+                    options.FindOne().SetProjection(bson.D{{Key: "delegate_name", Value: 1}, {"_id", 0}})).
+                    Decode(&del)
+                bestPctName = asString(del["delegate_name"])
+            }
+        }
+    }
+
+    // --- 5) Most block producer rounds (statistics) ---
+    var topProducer bson.M
+    if err := colStats.FindOne(ctx,
+        bson.D{},
+        options.FindOne().
+            SetSort(bson.D{{Key: "block_producer_total_rounds", Value: -1}}).
+            SetProjection(bson.D{{Key: "_id", Value: 1}, {Key: "block_producer_total_rounds", Value: 1}}),
+    ).Decode(&topProducer); err != nil {
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+    }
+    mostProducerRounds := int(toInt64(topProducer["block_producer_total_rounds"]))
+    var topProducerDelegate bson.M
+    _ = colDelegates.FindOne(ctx, bson.D{{Key: "public_key", Value: asString(topProducer["_id"])}},
+        options.FindOne().SetProjection(bson.D{{Key: "delegate_name", Value: 1}, {"_id", 0}})).
+        Decode(&topProducerDelegate)
+    mostProducerRoundsDelegateName := asString(topProducerDelegate["delegate_name"])
+
+    // --- 6) Circulating supply & vote percentage (same emission math you used) ---
+    generatedSupply := FIRST_BLOCK_MINING_REWARD + XCASH_PREMINE_TOTAL_SUPPLY
+    for h := 2; h < height; h++ {
+        if h < XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT {
+            generatedSupply = generatedSupply + (XCASH_TOTAL_SUPPLY-generatedSupply)/XCASH_EMMISION_FACTOR
+        } else {
+            generatedSupply += (XCASH_TOTAL_SUPPLY - generatedSupply) / XCASH_DPOPS_EMMISION_FACTOR
+        }
+    }
+    circulating := int64((generatedSupply - (XCASH_PREMINE_TOTAL_SUPPLY - XCASH_PREMINE_CIRCULATING_SUPPLY)) * XCASH_WALLET_DECIMAL_PLACES_AMOUNT)
+
+    // --- 7) Total voters by summing reserve_proofs_* collections (auto-discover shards) ---
+    totalVoters := 0
+    if names, _ := db.ListCollectionNames(ctx, bson.D{}); len(names) > 0 {
+        for _, name := range names {
+            if strings.HasPrefix(name, "reserve_proofs_") {
+                if n, err := db.Collection(name).CountDocuments(ctx, bson.D{}); err == nil {
+                    totalVoters += int(n)
+                }
+            }
+        }
+    }
+
+    avgVote := int64(0)
+    if totalVoters > 0 {
+        avgVote = totalVotes / int64(totalVoters)
+    }
+    votePct := 0
+    if circulating > 0 {
+        votePct = int(math.Round((float64(totalVotes) / float64(circulating)) * 100.0))
+    }
+
+    // --- 8) Compose v2 output (same field names for drop-in compatibility) ---
+    out := v1XcashDpopsUnauthorizedStats{
+        MostTotalRoundsDelegateName:                   mostTotalRoundsDelegateName,
+        MostTotalRounds:                               mostTotalRounds,
+        BestBlockVerifierOnlinePercentageDelegateName: bestPctName,
+        BestBlockVerifierOnlinePercentage:             bestPct,
+        MostBlockProducerTotalRoundsDelegateName:      mostProducerRoundsDelegateName,
+        MostBlockProducerTotalRounds:                  mostProducerRounds,
+        TotalVotes:                                    totalVotes,
+        TotalVoters:                                   totalVoters,
+        AverageVote:                                   avgVote,
+        VotePercentage:                                votePct,
+        RoundNumber:                                   height - XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT,
+        TotalRegisteredDelegates:                      int(totalDelegates),
+        TotalOnlineDelegates:                          int(onlineCount),
+        CurrentBlockVerifiersMaximumAmount:            BLOCK_VERIFIERS_AMOUNT,
+        CurrentBlockVerifiersValidAmount:              BLOCK_VERIFIERS_VALID_AMOUNT,
+    }
+
+    return c.JSON(out)
+}
+
+// --- helpers ---
+func asString(v any) string {
+    switch t := v.(type) {
+    case string:
+        return t
+    case fmt.Stringer:
+        return t.String()
+    default:
+        b, _ := json.Marshal(v)
+        return string(b)
+    }
+}
+func toInt64(v any) int64 {
+    switch t := v.(type) {
+    case int32: return int64(t)
+    case int64: return t
+    case float64: return int64(t)
+    case primitive.Int32: return int64(t)
+    case primitive.Int64: return int64(t)
+    case primitive.Decimal128:
+        i, _ := t.BigInt()
+        return i.Int64()
+    case string:
+        n, _ := strconv.ParseInt(t, 10, 64)
+        return n
+    default:
+        return 0
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 func v1_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 
 	// Variables

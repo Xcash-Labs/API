@@ -19,7 +19,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	mongoClient, mongoClienterror = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	mongoClient, mongoClienterror = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://127.0.0.1:27017/?directConnection=true&tls=true"))
 	if mongoClienterror != nil {
 		os.Exit(0)
 	}
@@ -48,7 +48,7 @@ func main() {
 	app.Post("/v1/xcash/blockchain/unauthorized/address/createIntegrated/", v1_xcash_blockchain_unauthorized_address_create_integrated)
 
 	// setup xcash dpops routes
-	app.Get("/v1/xcash/dpops/unauthorized/stats/", v1_xcash_dpops_unauthorized_stats)
+	app.Get("/v1/xcash/dpops/unauthorized/stats/", v2_xcash_dpops_unauthorized_stats)
 	app.Get("/v1/xcash/dpops/unauthorized/delegates/registered/", v1_xcash_dpops_unauthorized_delegates_registered)
 	app.Get("/v1/xcash/dpops/unauthorized/delegates/online/", v1_xcash_dpops_unauthorized_delegates_online)
 	app.Get("/v1/xcash/dpops/unauthorized/delegates/active/", v1_xcash_dpops_unauthorized_delegates_active)
