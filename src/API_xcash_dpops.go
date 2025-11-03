@@ -2,23 +2,18 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
-	"sort"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
-	"fmt"
-	"math"
-	"os"
-
-	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
 
 func varint_decode(s string) int64 {
 	// Variables
@@ -446,33 +441,46 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 
 // --- helpers ---
 func asString(v any) string {
-    switch t := v.(type) {
-    case string:
-        return t
-    case fmt.Stringer:
-        return t.String()
-    default:
-        b, _ := json.Marshal(v)
-        return string(b)
-    }
+	switch t := v.(type) {
+	case string:
+		return t
+	default:
+		b, _ := json.Marshal(v)
+		return string(b)
+	}
 }
+
 func toInt64(v any) int64 {
-    switch t := v.(type) {
-    case int32: return int64(t)
-    case int64: return t
-    case float64: return int64(t)
-    case primitive.Int32: return int64(t)
-    case primitive.Int64: return int64(t)
-    case primitive.Decimal128:
-        i, _ := t.BigInt()
-        return i.Int64()
-    case string:
-        n, _ := strconv.ParseInt(t, 10, 64)
-        return n
-    default:
-        return 0
-    }
+	switch t := v.(type) {
+	case int:
+		return int64(t)
+	case int32:
+		return int64(t)
+	case int64:
+		return t
+	case float64:
+		return int64(t)
+	case string:
+		n, _ := strconv.ParseInt(t, 10, 64)
+		return n
+	case primitive.Decimal128:
+		bi, _, _ := t.BigInt() // (big.Int, scale int32, err)
+		if bi == nil {
+			return 0
+		}
+		if bi.IsInt64() {
+			return bi.Int64()
+		}
+		// clamp if it doesn’t fit in int64
+		if bi.Sign() >= 0 {
+			return math.MaxInt64
+		}
+		return math.MinInt64
+	default:
+		return 0
+	}
 }
+
 
 
 
