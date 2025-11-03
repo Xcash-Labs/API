@@ -170,25 +170,22 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
     var rpcResp rpcGetBlockCount
     body, httpErr := send_http_data("http://127.0.0.1:18281/json_rpc", `{"jsonrpc":"2.0","id":"0","method":"get_block_count"}`)
 
-	fmt.Println("body:", body)
+//	fmt.Println("body:", body)
 
 	if httpErr != nil || !strings.Contains(body, `"result"`) || json.Unmarshal([]byte(body), &rpcResp) != nil {
         return c.JSON(ErrorResults{"Could not get blockcount from server"})
     }
     height := rpcResp.Result.Count
 
-
-
-
     // --- 2) Totals from delegates (count, online_count, totalVotes) ---
     totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
     if err != nil {
-        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 1"})
     }
 
     onlineCount, err := colDelegates.CountDocuments(ctx, bson.D{{Key: "online_status", Value: "true"}})
     if err != nil {
-        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 2"})
     }
 
     // Sum total_vote_count across all delegates (stored as NumberLong)
@@ -198,10 +195,10 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
         {{"$group", bson.D{{"_id", nil}, {"total", bson.D{{"$sum", "$total_vote_count"}}}}}},
     })
     if err != nil {
-        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 3"})
     }
     if err = cur.All(ctx, &sumAgg); err != nil || len(sumAgg) == 0 {
-        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
+        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 4"})
     }
     totalVotes := toInt64(sumAgg[0]["total"])
 
