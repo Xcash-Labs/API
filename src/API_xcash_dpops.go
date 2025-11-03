@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"time"
-//    "fmt"
+    "fmt"
 
 	"math"
 
@@ -186,7 +186,7 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 
 	totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
 	if err != nil {
-		log.Printf("[v2/stats] CountDocuments(delegates) failed: %v", err)
+		fmt.Println("[v2/stats] CountDocuments(delegates) failed: %v", err)
 		return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 1"})
 	}
 
