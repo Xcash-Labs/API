@@ -178,10 +178,20 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
     height := rpcResp.Result.Count
 
     // --- 2) Totals from delegates (count, online_count, totalVotes) ---
-    totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
-    if err != nil {
-        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 1"})
-    }
+//    totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
+//    if err != nil {
+//        return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 1"})
+//    }
+
+
+	totalDelegates, err := colDelegates.CountDocuments(ctx, bson.D{})
+	if err != nil {
+		log.Printf("[v2/stats] CountDocuments(delegates) failed: %v", err)
+		return c.JSON(ErrorResults{"Could not get the xcash dpops statistics 1"})
+	}
+
+
+
 
     onlineCount, err := colDelegates.CountDocuments(ctx, bson.D{{Key: "online_status", Value: "true"}})
     if err != nil {
