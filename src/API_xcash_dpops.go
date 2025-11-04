@@ -289,7 +289,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-func v1_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
+func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
 	}
@@ -394,7 +394,7 @@ func v1_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	}
 
 	// 6) Build output (strict stats already loaded)
-	out := v1XcashDpopsUnauthorizedDelegatesData{}
+	out := v2XcashDpopsUnauthorizedDelegatesData{}
 	// online
 	switch v := d["online_status"].(type) {
 	case bool:
