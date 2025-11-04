@@ -621,9 +621,7 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// NOTE: consensus_rounds lives in XCASH_PROOF_OF_STAKE in your example.
-	// If your constant is named differently, adjust here.
-	db := mongoClient.Database(XCASH_PROOF_OF_STAKE_DATABASE)
+	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
 	col := db.Collection("consensus_rounds")
 
 	// Find the round by block_height
