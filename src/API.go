@@ -13,6 +13,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+var mongoClient *mongo.Client
+
 func main() {
 	user := os.Getenv("MONGODB_READ_USERNAME")
 	pass := os.Getenv("MONGODB_READ_PASSWORD")
@@ -74,11 +76,12 @@ func main() {
 		}
 	}()
 
-	// setup fiber
+	mongoClient = client                  // make it visible to existing handlers
 	app := fiber.New(fiber.Config{
 		Prefork:               false,
 		DisableStartupMessage: true,
 	})
+	app.Locals("mongo", mongoClient)      // also expose via Fiber locals
 
 	// setup blockchain routes
 	app.Get("/v1/xcash/blockchain/unauthorized/stats/", v1_xcash_blockchain_unauthorized_stats)
@@ -119,5 +122,7 @@ func main() {
 	go timers_build_data()
 
 	// start the server
-	app.Listen(":9000")
+	if err := app.Listen(":9000"); err != nil {
+    	log.Fatalf("fiber listen: %v", err)
+	}
 }
