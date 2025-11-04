@@ -304,8 +304,8 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 
 	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
 	colDelegates := db.Collection("delegates")
-	colProofs    := db.Collection("reserve_proofs")
-	colStats     := db.Collection("statistics")
+	colProofs := db.Collection("reserve_proofs")
+	colStats := db.Collection("statistics")
 
 	// 1) Load the requested delegate
 	var d bson.M
@@ -317,15 +317,15 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 		return c.JSON(ErrorResults{"Could not get the delegates data"})
 	}
 
-	// 2) STRICT: stats must exist for this delegate
+	// 2) STRICT: stats must exist (_id == public_address)
 	var s bson.M
 	if err := colStats.FindOne(ctx, bson.D{{Key: "_id", Value: pubAddr}}).Decode(&s); err != nil {
 		return c.JSON(ErrorResults{"Statistics data not found for delegate"})
 	}
 
-	// 3) Aggregate voters and summed votes for the requested delegate
+	// 3) Aggregate voters and summed votes for this delegate
 	totalVoters := 0
-	totalVotes  := int64(0)
+	totalVotes := int64(0)
 	{
 		p := mongo.Pipeline{
 			{{Key: "$match", Value: bson.M{"public_address_voted_for": pubAddr}}},
@@ -345,16 +345,15 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 			_ = cur.Close(ctx)
 			if len(rows) == 1 {
 				totalVoters = int(toInt64(rows[0]["voters"]))
-				totalVotes  = toInt64(rows[0]["sumVotes"])
+				totalVotes = toInt64(rows[0]["sumVotes"])
 			}
 		}
-		// If no agg rows, fallback to stored total_vote_count on the delegate doc
 		if totalVotes == 0 {
 			totalVotes = toInt64(d["total_vote_count"])
 		}
 	}
 
-	// 4) Load minimal info for all delegates to compute rank by votes
+	// 4) Build rank by votes across all delegates
 	type row struct {
 		Name  string
 		Votes int64
@@ -380,11 +379,9 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 				Votes: toInt64(it["total_vote_count"]),
 			})
 		}
-		// Fallback: if a delegate has 0 stored, try to get live sum (cheap single-doc agg per need is overkill here; okay to leave)
+		sort.SliceStable(all, func(i, j int) bool { return all[i].Votes > all[j].Votes })
 	}
 
-	// 5) Sort by votes desc and compute rank
-	sort.SliceStable(all, func(i, j int) bool { return all[i].Votes > all[j].Votes })
 	rank := 0
 	for i := range all {
 		if all[i].Name == delegateName {
@@ -393,8 +390,9 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 		}
 	}
 
-	// 6) Build output (strict stats already loaded)
+	// 5) Build v2 output (no SharedDelegate/SeedNode)
 	out := v2XcashDpopsUnauthorizedDelegatesData{}
+
 	// online
 	switch v := d["online_status"].(type) {
 	case bool:
@@ -402,34 +400,27 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	case string:
 		out.Online = strings.EqualFold(v, "true")
 	}
-	// simple shared/seed flags preserved from old behavior if you still need them
-	if asString(d["shared_delegate_status"]) == "solo" {
-		out.SharedDelegate = false
-	} else {
-		out.SharedDelegate = true
-	}
-	ip := asString(d["IP_address"])
-	if strings.Contains(ip, ".xcash.foundation") && ip != "api.xcash.foundation" {
-		out.SeedNode = true
-	} else {
-		out.SeedNode = false
-	}
 
-	// fill fields
-	out.Votes            = totalVotes
-	out.Voters           = totalVoters
-	out.IPAdress         = ip
-	out.DelegateName     = asString(d["delegate_name"])
-	out.PublicAddress    = pubAddr
-	out.About            = asString(d["about"])
-	out.Website          = asString(d["website"])
-	out.Team             = asString(d["team"])
-	out.Specifications   = asString(d["specifications"]) // or "server_specs" if that’s your field
-	out.Fee              = int(toInt64(d["delegate_fee"]))
-	out.TotalRounds      = int(toInt64(s["block_verifier_total_rounds"]))
-	out.TotalBlockProducerRounds = int(toInt64(s["block_producer_total_rounds"]))
-	verifierTotal       := toInt64(s["block_verifier_total_rounds"])
-	verifierOnline      := toInt64(s["block_verifier_online_total_rounds"])
+	// fill v2 fields
+	out.Votes = totalVotes
+	out.Voters = totalVoters
+	out.IPAdress = asString(d["IP_address"])
+	out.DelegateName = asString(d["delegate_name"])
+	out.PublicAddress = pubAddr
+	out.About = asString(d["about"])
+	out.Website = asString(d["website"])
+	out.Team = asString(d["team"])
+	// depending on your schema, this might be "specifications" or "server_specs":
+	out.Specifications = asString(d["specifications"])
+	out.DelegateType = asString(d["delegate_type"])
+	out.Fee = int(toInt64(d["delegate_fee"]))
+
+	verifierTotal := toInt64(s["block_verifier_total_rounds"])
+	verifierOnline := toInt64(s["block_verifier_online_total_rounds"])
+	producerTotal := toInt64(s["block_producer_total_rounds"])
+
+	out.TotalRounds = int(verifierTotal)
+	out.TotalBlockProducerRounds = int(producerTotal)
 	if verifierTotal > 0 {
 		out.OnlinePercentage = int((verifierOnline * 100) / verifierTotal)
 	}
