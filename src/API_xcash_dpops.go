@@ -5,12 +5,9 @@ import (
 	"strconv"
 	"sort"
 	"context"
-//	"encoding/hex"
-//	"encoding/json"
+    "errors" 
 	"time"
     "fmt"
-
-//	"math"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
@@ -18,7 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
 
 // Returns (publicAddress, publicKey, error). publicKey is what you use to read statistics (_id == publicKey).
 func getDelegateKeysFromName(ctx context.Context, delegateName string) (string, string, error) {
