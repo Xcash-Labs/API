@@ -17,9 +17,59 @@ func main() {
 
 	fmt.Println("Hello, world!")
 
+	user := os.Getenv("MONGODB_READ_USERNAME")
+	pass := os.Getenv("MONGODB_READ_PASSWORD")
+	const caPath   = "/etc/ssl/mongodb/mongodb.crt" // CA cert to verify server
+	const certPath = "/etc/ssl/mongodb/mongodb.pem" // client cert (PEM, contains cert)
+	const keyPath  = "/etc/ssl/mongodb/mongodb.pem" // client key (PEM, same file if combined)
+	const mongoTLSHost = "seeds.xcashseeds.us"
+
+	if user == "" || pass == "" {
+		log.Fatal("Mongo env missing: set MONGODB_READ_USERNAME and MONGODB_READ_PASSWORD")
+	}
+
+	// --- Build tls.Config with CA + client cert ---
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil { log.Fatalf("read CA: %v", err) }
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		log.Fatal("bad CA PEM")
+	}
+
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil { log.Fatalf("load client keypair: %v", err) }
+
+	tlsCfg := &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		RootCAs:      pool,
+		Certificates: []tls.Certificate{cert},
+		ServerName:   mongoTLSHost,
+	}
+
+	uri := "mongodb://localhost:27017/?" + "directConnection=true&tls=true&retryReads=true&appName=xcash-api"
+
+	clientOpts := options.Client().
+		ApplyURI(uri).
+		SetTLSConfig(tlsCfg)
+
+	if user != "" && pass != "" {
+		clientOpts.SetAuth(options.Credential{
+			AuthSource: "admin",
+			Username:   user,
+			Password:   pass,
+			Mechanism: "SCRAM-SHA-256",
+		})
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	mongoClient, mongoClienterror = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+
+	cl, err := mongo.Connect(ctx, clientOpts)
+	if err != nil { log.Fatalf("mongo connect: %v", err) }
+	if err := cl.Ping(ctx, nil); err != nil { log.Fatalf("mongo ping: %v", err) }
+
+	log.Println("MongoDB connected (hard-coded TLS, direct/local)")
+
 	if mongoClienterror != nil {
 		os.Exit(0)
 	}
