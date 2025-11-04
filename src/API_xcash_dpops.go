@@ -20,40 +20,35 @@ import (
 )
 
 
-func get_delegate_address_from_name(delegate string) string {
-	var database_data XcashDpopsDelegatesCollection
-
-	// set the collection
-	collection := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
-
-	// get the delegates data
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := collection.FindOne(ctx, bson.D{{"delegate_name", delegate}}).Decode(&database_data)
-	if err == mongo.ErrNoDocuments {
-		return ""
-	} else if err != nil {
-		return ""
+// Returns (publicAddress, publicKey, error). publicKey is what you use to read statistics (_id == publicKey).
+func getDelegateKeysFromName(ctx context.Context, delegateName string) (string, string, error) {
+	if mongoClient == nil {
+		return "", "", fmt.Errorf("database unavailable")
 	}
-	return database_data.PublicAddress
-}
+	col := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
 
-func get_delegate_name_from_address(address string) string {
-	var database_data XcashDpopsDelegatesCollection
-
-	// set the collection
-	collection := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
-
-	// get the delegates data
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := collection.FindOne(ctx, bson.D{{"public_address", address}}).Decode(&database_data)
-	if err == mongo.ErrNoDocuments {
-		return ""
-	} else if err != nil {
-		return ""
+	// Only fetch the fields we need
+	proj := bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "public_address", Value: 1},
+		{Key: "public_key", Value: 1},
 	}
-	return database_data.DelegateName
+	opts := options.FindOne().SetProjection(proj)
+
+	var doc bson.M
+	if err := col.FindOne(ctx, bson.D{{Key: "delegate_name", Value: delegateName}}, opts).Decode(&doc); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return "", "", fmt.Errorf("delegate not found")
+		}
+		return "", "", err
+	}
+
+	addr := asString(doc["public_address"])
+	key  := asString(doc["public_key"])
+	if key == "" {
+		return "", "", fmt.Errorf("delegate missing public_key")
+	}
+	return addr, key, nil
 }
 
 func toInt64(v any) int64 {
@@ -307,23 +302,51 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	colProofs := db.Collection("reserve_proofs")
 	colStats := db.Collection("statistics")
 
-	// 1) Load the requested delegate
+	// 1) Load the requested delegate (need public_address + public_key + profile fields)
 	var d bson.M
-	if err := colDelegates.FindOne(ctx, bson.D{{Key: "delegate_name", Value: delegateName}}).Decode(&d); err != nil {
-		return c.JSON(ErrorResults{"Could not get the delegates data"})
-	}
-	pubAddr := asString(d["public_address"])
-	if pubAddr == "" {
+	delegateProj := options.FindOne().SetProjection(bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "delegate_name", Value: 1},
+		{Key: "delegate_type", Value: 1},
+		{Key: "public_address", Value: 1},
+		{Key: "public_key", Value: 1},
+		{Key: "IP_address", Value: 1},
+		{Key: "online_status", Value: 1},
+		{Key: "delegate_fee", Value: 1},
+		{Key: "about", Value: 1},
+		{Key: "website", Value: 1},
+		{Key: "team", Value: 1},
+		{Key: "specifications", Value: 1},
+		{Key: "total_vote_count", Value: 1},
+	})
+	if err := colDelegates.FindOne(
+		ctx,
+		bson.D{{Key: "delegate_name", Value: delegateName}},
+		delegateProj,
+	).Decode(&d); err != nil {
 		return c.JSON(ErrorResults{"Could not get the delegates data"})
 	}
 
-	// 2) STRICT: stats must exist (_id == public_address)
+	pubAddr := asString(d["public_address"]) // for proofs + response
+	pubKey  := asString(d["public_key"])     // for statistics (_id == public_key)
+	if pubAddr == "" || pubKey == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// 2) STRICT: stats must exist (_id == public_key)
 	var s bson.M
-	if err := colStats.FindOne(ctx, bson.D{{Key: "_id", Value: pubAddr}}).Decode(&s); err != nil {
-		return c.JSON(ErrorResults{"Statistics data not found for delegate"})
+	statsProj := options.FindOne().SetProjection(bson.D{
+		{Key: "_id", Value: 1},
+		{Key: "block_verifier_total_rounds", Value: 1},
+		{Key: "block_verifier_online_total_rounds", Value: 1},
+		{Key: "block_producer_total_rounds", Value: 1},
+		{Key: "last_counted_block", Value: 1},
+	})
+	if err := colStats.FindOne(ctx, bson.D{{Key: "_id", Value: pubKey}}, statsProj).Decode(&s); err != nil {
+		return c.JSON(ErrorResults{fmt.Sprintf("Statistics data not found for delegate: %s", delegateName)})
 	}
 
-	// 3) Aggregate voters and summed votes for this delegate
+	// 3) Aggregate voters and summed votes for this delegate (by public_address)
 	totalVoters := 0
 	totalVotes := int64(0)
 	{
@@ -345,19 +368,17 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 			_ = cur.Close(ctx)
 			if len(rows) == 1 {
 				totalVoters = int(toInt64(rows[0]["voters"]))
-				totalVotes = toInt64(rows[0]["sumVotes"])
+				totalVotes  = toInt64(rows[0]["sumVotes"])
 			}
 		}
+		// fallback to stored delegate total if no agg rows
 		if totalVotes == 0 {
 			totalVotes = toInt64(d["total_vote_count"])
 		}
 	}
 
-	// 4) Build rank by votes across all delegates
-	type row struct {
-		Name  string
-		Votes int64
-	}
+	// 4) Rank by votes across all delegates (desc)
+	type row struct{ Name string; Votes int64 }
 	var all []row
 	{
 		proj := bson.D{
@@ -390,8 +411,8 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 		}
 	}
 
-	// 5) Build v2 output (no SharedDelegate/SeedNode)
-	out := v2XcashDpopsUnauthorizedDelegatesData{}
+	// 5) Build v2 output
+	var out v2XcashDpopsUnauthorizedDelegatesData
 
 	// online
 	switch v := d["online_status"].(type) {
@@ -401,25 +422,24 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 		out.Online = strings.EqualFold(v, "true")
 	}
 
-	// fill v2 fields
-	out.Votes = totalVotes
-	out.Voters = totalVoters
-	out.IPAdress = asString(d["IP_address"])
-	out.DelegateName = asString(d["delegate_name"])
+	// fill fields
+	out.Votes         = totalVotes
+	out.Voters        = totalVoters
+	out.IPAdress      = asString(d["IP_address"])
+	out.DelegateName  = asString(d["delegate_name"])
 	out.PublicAddress = pubAddr
-	out.About = asString(d["about"])
-	out.Website = asString(d["website"])
-	out.Team = asString(d["team"])
-	// depending on your schema, this might be "specifications" or "server_specs":
-	out.Specifications = asString(d["specifications"])
-	out.DelegateType = asString(d["delegate_type"])
-	out.Fee = int(toInt64(d["delegate_fee"]))
+	out.About         = asString(d["about"])
+	out.Website       = asString(d["website"])
+	out.Team          = asString(d["team"])
+	out.Specifications = asString(d["specifications"]) // or "server_specs" if that’s your field
+	out.DelegateType  = asString(d["delegate_type"])
+	out.Fee           = int(toInt64(d["delegate_fee"]))
 
-	verifierTotal := toInt64(s["block_verifier_total_rounds"])
+	verifierTotal  := toInt64(s["block_verifier_total_rounds"])
 	verifierOnline := toInt64(s["block_verifier_online_total_rounds"])
-	producerTotal := toInt64(s["block_producer_total_rounds"])
+	producerTotal  := toInt64(s["block_producer_total_rounds"])
 
-	out.TotalRounds = int(verifierTotal)
+	out.TotalRounds              = int(verifierTotal)
 	out.TotalBlockProducerRounds = int(producerTotal)
 	if verifierTotal > 0 {
 		out.OnlinePercentage = int((verifierOnline * 100) / verifierTotal)
@@ -428,3 +448,5 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 
 	return c.JSON(out)
 }
+
+
