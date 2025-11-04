@@ -338,16 +338,16 @@ func toInt64(v any) int64 {
 		}
 		return 0
 	case primitive.Decimal128:
-		bi, _, ok := t.BigInt() // <-- THREE return values
-		if !ok || bi == nil {
+		bi, _, okDec := t.BigInt() // rename to avoid collisions
+		if !okDec || bi == nil {
 			return 0
 		}
-		// NOTE: this will clamp if the decimal128 doesn't fit in int64
 		return bi.Int64()
 	default:
 		return 0
 	}
 }
+
 
 func asString(v any) string {
 	if v == nil {
