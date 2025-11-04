@@ -142,7 +142,7 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 
-	psDB := mongoClient.Database(XCASH_PROOF_OF_STAKE_DATABASE)
+	psDB := mongoClient.Database(XCASH_DPOPS_DATABASE)
 	colRounds := psDB.Collection("consensus_rounds")
 
 	bh := int64(block.Result.BlockHeader.Height)
