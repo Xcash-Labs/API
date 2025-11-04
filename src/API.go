@@ -106,10 +106,6 @@ func main() {
 		return c.SendString("Invalid API Request")
 	})
 
-	// start the timers
-	go timers()
-	go timers_build_data()
-
 	// start the server
 	if err := app.Listen(":9000"); err != nil {
     	log.Fatalf("fiber listen: %v", err)
