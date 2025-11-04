@@ -459,28 +459,18 @@ func v2_xcash_dpops_unauthorized_delegates_votes(c *fiber.Ctx) error {
 	defer cancel()
 
 	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
-	colDelegates := db.Collection("delegates")
 	colProofs := db.Collection("reserve_proofs")
 
-	// 1) Resolve delegate -> public_address (the address voters vote FOR)
-	var d bson.M
-	if err := colDelegates.FindOne(
-		ctx,
-		bson.D{{Key: "delegate_name", Value: delegateName}},
-		options.FindOne().SetProjection(bson.D{
-			{Key: "_id", Value: 0},
-			{Key: "public_address", Value: 1},
-		}),
-	).Decode(&d); err != nil {
-		return c.JSON(ErrorResults{"Could not get the delegates data"})
-	}
-	targetAddr := asString(d["public_address"])
-	if targetAddr == "" {
+	// Use your new helper to get the delegate's wallet address (and key if you want)
+	// addr = public_address to match public_address_voted_for
+	addr, _, err := getDelegateKeysFromName(ctx, delegateName)
+	if err != nil || addr == "" {
 		return c.JSON(ErrorResults{"Could not get the delegates data"})
 	}
 
-	// 2) One vote per voter address → no grouping needed.
-	// Return each proof as one row: { publicAddress: <voter>, amount: <total_vote> }
+	// One vote per voter → no $group needed.
+	// IMPORTANT: voter address may be in `_id` (preferred) or sometimes `public_address`.
+	// Use $ifNull to fall back: publicAddress = public_address ?? _id
 	type aggRow struct {
 		PublicAddress string      `bson:"publicAddress"`
 		Amount        interface{} `bson:"amount"`
@@ -488,13 +478,15 @@ func v2_xcash_dpops_unauthorized_delegates_votes(c *fiber.Ctx) error {
 	var rows []aggRow
 
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"public_address_voted_for": targetAddr}}},
+		{{Key: "$match", Value: bson.M{"public_address_voted_for": addr}}},
 		{{Key: "$project", Value: bson.D{
 			{Key: "_id", Value: 0},
-			{Key: "publicAddress", Value: "$public_address"}, // voter address
-			{Key: "amount", Value: "$total_vote"},
+			{Key: "publicAddress", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$public_address", "$_id"}}}},
+			{Key: "amount",        Value: "$total_vote"},
 		}}},
-		{{Key: "$sort", Value: bson.D{{Key: "amount", Value: -1}}}}, // optional
+		// drop any odd empties just in case
+		{{Key: "$match", Value: bson.M{"publicAddress": bson.M{"$ne": ""}}}},
+		{{Key: "$sort",  Value: bson.D{{Key: "amount", Value: -1}}}},
 	}
 
 	if cur, err := colProofs.Aggregate(ctx, pipeline); err == nil {
@@ -504,7 +496,6 @@ func v2_xcash_dpops_unauthorized_delegates_votes(c *fiber.Ctx) error {
 		return c.JSON(ErrorResults{"Could not get the delegates data"})
 	}
 
-	// 3) Shape into API struct
 	out := make([]v2XcashDpopsUnauthorizedDelegatesVotes, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, v2XcashDpopsUnauthorizedDelegatesVotes{
