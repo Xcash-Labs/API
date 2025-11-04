@@ -339,7 +339,7 @@ type v2XcashDpopsUnauthorizedDelegatesBasicData struct {
 	Voters                   int    `json:"voters"`
 	IPAdress                 string `json:"IPAdress"`
 	DelegateName             string `json:"delegateName"`
-	DelegateType           	 string `json:"sharedDelegate"`
+	DelegateType           	 string `json:"DelegateType"`
 	Online                   bool   `json:"online"`
 	Fee                      int    `json:"fee"`
 	TotalRounds              int    `json:"totalRounds"`
@@ -347,11 +347,7 @@ type v2XcashDpopsUnauthorizedDelegatesBasicData struct {
 	OnlinePercentage         int    `json:"onlinePercentage"`
 }
 
-
-
-
-
-type v1XcashDpopsUnauthorizedDelegatesData struct {
+type v2XcashDpopsUnauthorizedDelegatesData struct {
 	Votes                    int64  `json:"votes"`
 	Voters                   int    `json:"voters"`
 	IPAdress                 string `json:"IPAdress"`
@@ -361,8 +357,7 @@ type v1XcashDpopsUnauthorizedDelegatesData struct {
 	Website                  string `json:"website"`
 	Team                     string `json:"team"`
 	Specifications           string `json:"specifications"`
-	SharedDelegate           bool   `json:"sharedDelegate"`
-	SeedNode                 bool   `json:"seedNode"`
+	DelegateType           	 string `json:"DelegateType"`
 	Online                   bool   `json:"online"`
 	Fee                      int    `json:"fee"`
 	TotalRounds              int    `json:"totalRounds"`
@@ -370,6 +365,13 @@ type v1XcashDpopsUnauthorizedDelegatesData struct {
 	OnlinePercentage         int    `json:"onlinePercentage"`
 	Rank                     int    `json:"rank"`
 }
+
+
+
+
+
+
+
 
 type v1XcashDpopsUnauthorizedDelegatesRounds struct {
 	TotalBlocksProduced int   `json:"totalBlocksProduced"`

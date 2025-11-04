@@ -92,10 +92,6 @@ func asString(v any) string {
 	return fmt.Sprint(v)
 }
 
-
-
-
-// Routes
 func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
@@ -289,6 +285,155 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 		}
 		return out[i].Votes > out[j].Votes
 	})
+
+	return c.JSON(out)
+}
+
+func v1_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
+
+	delegateName := c.Params("delegateName")
+	if strings.TrimSpace(delegateName) == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
+	colDelegates := db.Collection("delegates")
+	colProofs    := db.Collection("reserve_proofs")
+	colStats     := db.Collection("statistics")
+
+	// 1) Load the requested delegate
+	var d bson.M
+	if err := colDelegates.FindOne(ctx, bson.D{{Key: "delegate_name", Value: delegateName}}).Decode(&d); err != nil {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+	pubAddr := asString(d["public_address"])
+	if pubAddr == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// 2) STRICT: stats must exist for this delegate
+	var s bson.M
+	if err := colStats.FindOne(ctx, bson.D{{Key: "_id", Value: pubAddr}}).Decode(&s); err != nil {
+		return c.JSON(ErrorResults{"Statistics data not found for delegate"})
+	}
+
+	// 3) Aggregate voters and summed votes for the requested delegate
+	totalVoters := 0
+	totalVotes  := int64(0)
+	{
+		p := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"public_address_voted_for": pubAddr}}},
+			{{
+				Key: "$group",
+				Value: bson.D{
+					{Key: "_id", Value: "$public_address_voted_for"},
+					{Key: "voters", Value: bson.D{{Key: "$sum", Value: 1}}},
+					{Key: "sumVotes", Value: bson.D{{Key: "$sum", Value: "$total_vote"}}},
+				},
+			}},
+			{{Key: "$limit", Value: 1}},
+		}
+		if cur, err := colProofs.Aggregate(ctx, p); err == nil {
+			var rows []bson.M
+			_ = cur.All(ctx, &rows)
+			_ = cur.Close(ctx)
+			if len(rows) == 1 {
+				totalVoters = int(toInt64(rows[0]["voters"]))
+				totalVotes  = toInt64(rows[0]["sumVotes"])
+			}
+		}
+		// If no agg rows, fallback to stored total_vote_count on the delegate doc
+		if totalVotes == 0 {
+			totalVotes = toInt64(d["total_vote_count"])
+		}
+	}
+
+	// 4) Load minimal info for all delegates to compute rank by votes
+	type row struct {
+		Name  string
+		Votes int64
+	}
+	var all []row
+	{
+		proj := bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "delegate_name", Value: 1},
+			{Key: "total_vote_count", Value: 1},
+		}
+		cur, err := colDelegates.Find(ctx, bson.D{}, options.Find().SetProjection(proj))
+		if err != nil {
+			return c.JSON(ErrorResults{"Could not get the delegates data"})
+		}
+		var docs []bson.M
+		if err := cur.All(ctx, &docs); err != nil {
+			return c.JSON(ErrorResults{"Could not get the delegates data"})
+		}
+		for _, it := range docs {
+			all = append(all, row{
+				Name:  asString(it["delegate_name"]),
+				Votes: toInt64(it["total_vote_count"]),
+			})
+		}
+		// Fallback: if a delegate has 0 stored, try to get live sum (cheap single-doc agg per need is overkill here; okay to leave)
+	}
+
+	// 5) Sort by votes desc and compute rank
+	sort.SliceStable(all, func(i, j int) bool { return all[i].Votes > all[j].Votes })
+	rank := 0
+	for i := range all {
+		if all[i].Name == delegateName {
+			rank = i + 1
+			break
+		}
+	}
+
+	// 6) Build output (strict stats already loaded)
+	out := v1XcashDpopsUnauthorizedDelegatesData{}
+	// online
+	switch v := d["online_status"].(type) {
+	case bool:
+		out.Online = v
+	case string:
+		out.Online = strings.EqualFold(v, "true")
+	}
+	// simple shared/seed flags preserved from old behavior if you still need them
+	if asString(d["shared_delegate_status"]) == "solo" {
+		out.SharedDelegate = false
+	} else {
+		out.SharedDelegate = true
+	}
+	ip := asString(d["IP_address"])
+	if strings.Contains(ip, ".xcash.foundation") && ip != "api.xcash.foundation" {
+		out.SeedNode = true
+	} else {
+		out.SeedNode = false
+	}
+
+	// fill fields
+	out.Votes            = totalVotes
+	out.Voters           = totalVoters
+	out.IPAdress         = ip
+	out.DelegateName     = asString(d["delegate_name"])
+	out.PublicAddress    = pubAddr
+	out.About            = asString(d["about"])
+	out.Website          = asString(d["website"])
+	out.Team             = asString(d["team"])
+	out.Specifications   = asString(d["specifications"]) // or "server_specs" if that’s your field
+	out.Fee              = int(toInt64(d["delegate_fee"]))
+	out.TotalRounds      = int(toInt64(s["block_verifier_total_rounds"]))
+	out.TotalBlockProducerRounds = int(toInt64(s["block_producer_total_rounds"]))
+	verifierTotal       := toInt64(s["block_verifier_total_rounds"])
+	verifierOnline      := toInt64(s["block_verifier_online_total_rounds"])
+	if verifierTotal > 0 {
+		out.OnlinePercentage = int((verifierOnline * 100) / verifierTotal)
+	}
+	out.Rank = rank
 
 	return c.JSON(out)
 }
