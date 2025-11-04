@@ -2,19 +2,16 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"time"
-
 	"crypto/tls"
 	"crypto/x509"
 	"log"
 
-
-
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref" 
 )
 
 func main() {
@@ -57,7 +54,7 @@ func main() {
 			AuthSource: "admin",
 			Username:   user,
 			Password:   pass,
-			Mechanism:  "SCRAM-SHA-256",
+			AuthMechanism:  "SCRAM-SHA-256",
 		})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -66,13 +63,6 @@ func main() {
 	client, err := mongo.Connect(ctx, clientOpts)
 	if err != nil {
 		log.Fatalf("connect: %v", err)
-	}
-
-	// For a read-only client, prefer readable nodes (primary or secondary)
-	ctxPing, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelPing()
-	if err := client.Ping(ctxPing, readpref.SecondaryPreferred()); err != nil {
-		log.Fatalf("ping: %v", err)
 	}
 
 	log.Println("MongoDB connected (direct TLS read-only)")
