@@ -322,7 +322,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 
 
 
-unc toInt64(v any) int64 {
+func toInt64(v any) int64 {
     switch t := v.(type) {
     case int64:
         return t
