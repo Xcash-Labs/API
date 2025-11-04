@@ -50,7 +50,3 @@ const XPAYMENT_TWITTER_DATABASE = "xpaymentTwitter"
 const time_day = 86400;
 const time_hour = 3600;
 const START_TIME = 1654041600;
-
-// Variables
-var mongoClient *mongo.Client
-var mongoClienterror error
