@@ -445,4 +445,73 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
+func v2_xcash_dpops_unauthorized_delegates_votes(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
 
+	delegateName := c.Params("delegateName")
+	if strings.TrimSpace(delegateName) == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
+	colDelegates := db.Collection("delegates")
+	colProofs := db.Collection("reserve_proofs")
+
+	// 1) Resolve delegate -> public_address (the address voters vote FOR)
+	var d bson.M
+	if err := colDelegates.FindOne(
+		ctx,
+		bson.D{{Key: "delegate_name", Value: delegateName}},
+		options.FindOne().SetProjection(bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "public_address", Value: 1},
+		}),
+	).Decode(&d); err != nil {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+	targetAddr := asString(d["public_address"])
+	if targetAddr == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// 2) One vote per voter address → no grouping needed.
+	// Return each proof as one row: { publicAddress: <voter>, amount: <total_vote> }
+	type aggRow struct {
+		PublicAddress string      `bson:"publicAddress"`
+		Amount        interface{} `bson:"amount"`
+	}
+	var rows []aggRow
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"public_address_voted_for": targetAddr}}},
+		{{Key: "$project", Value: bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "publicAddress", Value: "$public_address"}, // voter address
+			{Key: "amount", Value: "$total_vote"},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "amount", Value: -1}}}}, // optional
+	}
+
+	if cur, err := colProofs.Aggregate(ctx, pipeline); err == nil {
+		_ = cur.All(ctx, &rows)
+		_ = cur.Close(ctx)
+	} else {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// 3) Shape into API struct
+	out := make([]v2XcashDpopsUnauthorizedDelegatesVotes, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, v2XcashDpopsUnauthorizedDelegatesVotes{
+			PublicAddress: r.PublicAddress,
+			Amount:        toInt64(r.Amount),
+		})
+	}
+
+	return c.JSON(out)
+}

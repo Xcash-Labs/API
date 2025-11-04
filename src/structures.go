@@ -391,10 +391,13 @@ type BlocksProduced struct {
 	Time        int   `json:"time"`
 }
 
-type v1XcashDpopsUnauthorizedDelegatesVotes struct {
+
+
+
+
+type v2XcashDpopsUnauthorizedDelegatesVotes struct {
 	PublicAddress string `json:"publicAddress"`
 	Amount        int64  `json:"amount"`
-	ReserveProof  string `json:"reserveProof"`
 }
 
 type v1XcashDpopsUnauthorizedVotes struct {
