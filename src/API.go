@@ -85,7 +85,7 @@ func main() {
 
 	// setup xcash dpops routes
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/:delegateName/", v1_xcash_dpops_unauthorized_delegates)
+	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegateName/", v2_xcash_dpops_unauthorized_delegates)
 
 //	app.Get("/v1/xcash/dpops/unauthorized/delegates/rounds/:delegateName", v1_xcash_dpops_unauthorized_delegates_rounds)
 //	app.Get("/v1/xcash/dpops/unauthorized/delegates/votes/:delegateName/:start/:limit", v1_xcash_dpops_unauthorized_delegates_votes)
