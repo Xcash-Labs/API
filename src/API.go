@@ -89,7 +89,7 @@ func main() {
 
 //	app.Get("/v1/xcash/dpops/unauthorized/delegates/rounds/:delegateName", v1_xcash_dpops_unauthorized_delegates_rounds)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/votes/:delegateName", v2_xcash_dpops_unauthorized_delegates_votes)
-//	app.Get("/v1/xcash/dpops/unauthorized/votes/:address", v1_xcash_dpops_unauthorized_votes)
+	app.Get("/v2/xcash/dpops/unauthorized/votes/:address", v2_xcash_dpops_unauthorized_votes)
 //	app.Get("/v1/xcash/dpops/unauthorized/rounds/:blockHeight", v1_xcash_dpops_unauthorized_rounds)
 //	app.Get("/v1/xcash/dpops/unauthorized/lastBlockProducer", v1_xcash_dpops_unauthorized_last_block_producer)
 

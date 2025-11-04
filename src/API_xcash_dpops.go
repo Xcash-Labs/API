@@ -506,3 +506,78 @@ func v2_xcash_dpops_unauthorized_delegates_votes(c *fiber.Ctx) error {
 
 	return c.JSON(out)
 }
+
+func v2_xcash_dpops_unauthorized_votes(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
+
+	addr := strings.TrimSpace(c.Params("address"))
+	if addr == "" {
+		return c.JSON(ErrorResults{"Could not get the vote details"})
+	}
+	// Optional: keep your old format checks if you want
+	// if !strings.HasPrefix(addr, XCASH_WALLET_PREFIX) || len(addr) != XCASH_WALLET_LENGTH {
+	// 	return c.JSON(ErrorResults{"Could not get the vote details"})
+	// }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
+	colProofs := db.Collection("reserve_proofs")
+	colDelegates := db.Collection("delegates")
+
+	// --- 1) Find this voter's proof ---
+	// In the new system, the voter may be in `_id` (preferred) or `public_address`.
+	// We match either to be safe.
+	var proof bson.M
+	if err := colProofs.FindOne(
+		ctx,
+		bson.M{
+			"$or": bson.A{
+				bson.M{"_id": addr},
+				bson.M{"public_address": addr},
+			},
+		},
+		options.FindOne().SetProjection(bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "public_address_voted_for", Value: 1},
+			{Key: "total_vote", Value: 1},
+		}),
+	).Decode(&proof); err != nil {
+		// Not found = this address hasn't voted
+		return c.JSON(ErrorResults{"This address has not voted"})
+	}
+
+	delegateAddr := asString(proof["public_address_voted_for"])
+	if delegateAddr == "" {
+		return c.JSON(ErrorResults{"This address has not voted"})
+	}
+	amount := toInt64(proof["total_vote"])
+
+	// --- 2) Resolve delegate name from delegates.public_address ---
+	var d bson.M
+	if err := colDelegates.FindOne(
+		ctx,
+		bson.D{{Key: "public_address", Value: delegateAddr}},
+		options.FindOne().SetProjection(bson.D{
+			{Key: "_id", Value: 0},
+			{Key: "delegate_name", Value: 1},
+		}),
+	).Decode(&d); err != nil {
+		// If the delegate doc is missing (shouldn't happen), keep a generic error
+		return c.JSON(ErrorResults{"Could not get the vote details"})
+	}
+	delegateName := asString(d["delegate_name"])
+	if delegateName == "" {
+		return c.JSON(ErrorResults{"Could not get the vote details"})
+	}
+
+	// --- 3) Shape response (new type) ---
+	out := v2XcashDpopsUnauthorizedVotes{
+		DelegateName: delegateName,
+		Amount:       amount,
+	}
+	return c.JSON(out)
+}
