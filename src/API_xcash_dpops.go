@@ -6,11 +6,11 @@ import (
 	"sort"
 	"context"
 	"encoding/hex"
-	"encoding/json"
+//	"encoding/json"
 	"time"
     "fmt"
 
-	"math"
+//	"math"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
@@ -333,10 +333,16 @@ func toInt64(v any) int64 {
 	case float64:
 		return int64(t)
 	case string:
-		if n, err := strconv.ParseInt(t, 10, 64); err == nil { return n }
+		if n, err := strconv.ParseInt(t, 10, 64); err == nil {
+			return n
+		}
 		return 0
 	case primitive.Decimal128:
-		bi, _ := t.BigInt()
+		bi, _, ok := t.BigInt() // <-- THREE return values
+		if !ok || bi == nil {
+			return 0
+		}
+		// NOTE: this will clamp if the decimal128 doesn't fit in int64
 		return bi.Int64()
 	default:
 		return 0
