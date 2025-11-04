@@ -2,18 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
-	"math/rand"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
