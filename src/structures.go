@@ -309,6 +309,17 @@ type v1XcashBlockchainUnauthorizedTxTxHash struct {
 	Amount        int64  `json:"amount"`
 }
 
+
+
+type XcashDpopsReserveBytesCollection struct {
+	ID                   string `bson:"_id"`
+	BlockHeight          string `bson:"block_height"`
+	ReserveBytesDataHash string `bson:"reserve_bytes_data_hash"`
+	ReserveBytes         string `bson:"reserve_bytes"`
+}
+
+
+
 // XCASH DPOPS
 
 type v1XcashDpopsUnauthorizedStats struct {
