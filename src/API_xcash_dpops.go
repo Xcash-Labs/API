@@ -322,30 +322,30 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 
 
 
-func toInt64(v any) int64 {
-	switch t := v.(type) {
-	case int64:
-		return t
-	case int32:
-		return int64(t)
-	case int:
-		return int64(t)
-	case float64:
-		return int64(t)
-	case string:
-		if n, err := strconv.ParseInt(t, 10, 64); err == nil {
-			return n
-		}
-		return 0
-	case primitive.Decimal128:
-		bi, _, okDec := t.BigInt() // rename to avoid collisions
-		if !okDec || bi == nil {
-			return 0
-		}
-		return bi.Int64()
-	default:
-		return 0
-	}
+unc toInt64(v any) int64 {
+    switch t := v.(type) {
+    case int64:
+        return t
+    case int32:
+        return int64(t)
+    case int:
+        return int64(t)
+    case float64:
+        return int64(t)
+    case string:
+        if n, err := strconv.ParseInt(t, 10, 64); err == nil {
+            return n
+        }
+        return 0
+    case primitive.Decimal128:
+        bi, _, errDec := t.BigInt() // v1.17.6: (*big.Int, scale int, error)
+        if errDec != nil || bi == nil {
+            return 0
+        }
+        return bi.Int64()
+    default:
+        return 0
+    }
 }
 
 
