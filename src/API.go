@@ -6,6 +6,7 @@ import (
 	"time"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"log"
 
 	"github.com/gofiber/fiber/v2"
@@ -73,25 +74,15 @@ func main() {
 	})
 
 	// setup blockchain routes
-	app.Get("/v1/xcash/blockchain/unauthorized/stats/", v1_xcash_blockchain_unauthorized_stats)
 	app.Get("/v1/xcash/blockchain/unauthorized/blocks/", v1_xcash_blockchain_unauthorized_blocks_blockHeight)
 	app.Get("/v1/xcash/blockchain/unauthorized/blocks/:blockHeight/", v1_xcash_blockchain_unauthorized_blocks_blockHeight)
-	app.Get("/v1/xcash/blockchain/unauthorized/tx/:txHash/", v1_xcash_blockchain_unauthorized_tx_txHash)
-	app.Post("/v1/xcash/blockchain/unauthorized/tx/prove/", v1_xcash_blockchain_unauthorized_tx_prove)
-	app.Post("/v1/xcash/blockchain/unauthorized/address/prove/", v1_xcash_blockchain_unauthorized_address_prove)
-	app.Get("/v1/xcash/blockchain/unauthorized/address/history/:type/:address/", v1_xcash_blockchain_unauthorized_address_history)
-	app.Get("/v1/xcash/blockchain/unauthorized/address/validate/:address/", v1_xcash_blockchain_unauthorized_address_validate)
-	app.Post("/v1/xcash/blockchain/unauthorized/address/createIntegrated/", v1_xcash_blockchain_unauthorized_address_create_integrated)
 
 	// setup xcash dpops routes
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegateName/", v2_xcash_dpops_unauthorized_delegates)
-
-//	app.Get("/v1/xcash/dpops/unauthorized/delegates/rounds/:delegateName", v1_xcash_dpops_unauthorized_delegates_rounds)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/votes/:delegateName", v2_xcash_dpops_unauthorized_delegates_votes)
 	app.Get("/v2/xcash/dpops/unauthorized/votes/:address", v2_xcash_dpops_unauthorized_votes)
-//	app.Get("/v1/xcash/dpops/unauthorized/rounds/:blockHeight", v1_xcash_dpops_unauthorized_rounds)
-//	app.Get("/v1/xcash/dpops/unauthorized/lastBlockProducer", v1_xcash_dpops_unauthorized_last_block_producer)
+	app.Get("/v2/xcash/dpops/unauthorized/rounds/:blockHeight", v2_xcash_dpops_unauthorized_rounds)
 
 	// setup xpayment twitter routes
 	app.Get("/v1/xpayment-twitter/twitter/unauthorized/stats/", v1_xpayment_twitter_unauthorized_stats)
