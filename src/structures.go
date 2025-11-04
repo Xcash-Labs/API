@@ -1,5 +1,9 @@
 package main
 
+import (
+	"time"
+)
+
 // Errors
 
 type ErrorResults struct {

@@ -6,7 +6,6 @@ import (
 	"time"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"log"
 
 	"github.com/gofiber/fiber/v2"

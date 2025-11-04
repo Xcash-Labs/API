@@ -8,6 +8,7 @@ import (
     "errors" 
 	"time"
     "fmt"
+	"encoding/base64"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
