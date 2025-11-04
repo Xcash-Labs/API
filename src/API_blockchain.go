@@ -17,34 +17,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func blockchain_size() (int64, error) {
-	// Variables
-	var size int64
-
-	err := filepath.Walk(BLOCKCHAIN_DIRECTORY, func(_ string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() {
-			size += info.Size()
-		}
-		return err
-	})
-	return size, err
-}
-
-func RandStringBytes(n int) string {
-	// Constants
-	const letterBytes = "0123456789abcdef"
-
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letterBytes[rand.Intn(len(letterBytes))]
-	}
-	return string(b)
-}
-
 func get_current_block_height() int {
 	// Variables
 	var data_read CurrentBlockHeight
@@ -61,35 +33,7 @@ func get_current_block_height() int {
 	return data_read.Result.Count
 }
 
-func get_block_delegate(requestBlockHeight int) string {
-	// Variables
-	var database_data XcashDpopsReserveBytesCollection
-
-	// get the collection
-	block_height_data := strconv.Itoa(int(((requestBlockHeight - XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT) / BLOCKS_PER_DAY_FIVE_MINUTE_BLOCK_TIME)) + 1)
-	collection_number := "reserve_bytes_" + block_height_data
-	collection := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection(collection_number)
-
-	// get the reserve bytes
-	filter := bson.D{{"block_height", strconv.Itoa(requestBlockHeight)}}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := collection.FindOne(ctx, filter).Decode(&database_data)
-	if err == mongo.ErrNoDocuments {
-		return ""
-	} else if err != nil {
-		return ""
-	}
-
-	// get the delegate name from the reserve bytes
-	delegate_name := database_data.ReserveBytes[strings.Index(database_data.ReserveBytes, BLOCKCHAIN_RESERVED_BYTES_START)+len(BLOCKCHAIN_RESERVED_BYTES_START) : strings.Index(database_data.ReserveBytes, BLOCKCHAIN_DATA_SEGMENT_STRING)]
-	delegate_name_data, err := hex.DecodeString(delegate_name)
-	if err != nil {
-		return ""
-	}
-
-	return string(delegate_name_data)
-}
+// Handlers
 
 func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	// Short-circuit if DB is down; still okay to serve pure RPC data, but we need DB for DPOPS bits
