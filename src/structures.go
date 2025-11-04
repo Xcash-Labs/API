@@ -275,55 +275,6 @@ type v2XcashBlockchainUnauthorizedBlocksBlockHeight struct {
 	Tx           []string `json:"tx"`
 }
 
-type v1XcashBlockchainUnauthorizedTxProve struct {
-	Valid  bool  `json:"valid"`
-	Amount int64 `json:"amount"`
-}
-
-type v1XcashBlockchainUnauthorizedAddressProve struct {
-	Amount int64 `json:"amount"`
-}
-
-type v1XcashBlockchainUnauthorizedAddressValidate struct {
-	Valid bool `json:"valid"`
-}
-
-type v1XcashBlockchainUnauthorizedAddressHistory struct {
-	Tx       string `json:"tx"`
-	Key      string `json:"key"`
-	Sender   string `json:"sender"`
-	Receiver string `json:"receiver"`
-	Amount   int64  `json:"amount"`
-	Height   int    `json:"height"`
-	Time     int    `json:"time"`
-}
-
-type v1XcashBlockchainUnauthorizedAddressCreateIntegrated struct {
-	IntegratedAddress string `json:"integratedAddress"`
-	PaymentID         string `json:"paymentId"`
-}
-
-type v1XcashBlockchainUnauthorizedTxTxHash struct {
-	Height        int    `json:"height"`
-	Confirmations int    `json:"confirmations"`
-	Time          int    `json:"time"`
-	Type          string `json:"type"`
-	Sender        string `json:"sender"`
-	Receiver      string `json:"receiver"`
-	Amount        int64  `json:"amount"`
-}
-
-
-
-type XcashDpopsReserveBytesCollection struct {
-	ID                   string `bson:"_id"`
-	BlockHeight          string `bson:"block_height"`
-	ReserveBytesDataHash string `bson:"reserve_bytes_data_hash"`
-	ReserveBytes         string `bson:"reserve_bytes"`
-}
-
-
-
 // XCASH DPOPS
 
 type v1XcashDpopsUnauthorizedStats struct {
@@ -398,9 +349,6 @@ type v2XcashDpopsUnauthorizedVotes struct {
 	Amount       int64  `json:"amount"`
 }
 
-
-// ====== Round Types ======
-
 type V2RoundMember struct {
 	PublicAddress string `json:"publicAddress"`
 	VrfPublicKey  string `json:"vrfPublicKey"`
@@ -423,8 +371,6 @@ type V2RoundData struct {
 	BlockVerifiers  []V2RoundMember `json:"blockVerifiers"`
 	Winner          V2RoundWinner   `json:"winner"`
 }
-
-
 
 // Xpayment Twitter
 type v1XpaymentTwitterUnauthorizedStats struct {
