@@ -42,7 +42,7 @@ func main() {
 		ApplyURI(uri).
 		SetTLSConfig(tlsCfg).
 		SetAuth(options.Credential{
-			AuthSource:    "admin",
+			AuthSource:    "XCASH_PROOF_OF_STAKE",
 			Username:      os.Getenv("MONGODB_READ_USERNAME"),
 			Password:      os.Getenv("MONGODB_READ_PASSWORD"),
 			AuthMechanism: "SCRAM-SHA-256",
