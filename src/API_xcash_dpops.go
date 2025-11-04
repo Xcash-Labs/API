@@ -82,7 +82,6 @@ func toInt64(v any) int64 {
     }
 }
 
-
 func asString(v any) string {
 	if v == nil {
 		return ""
@@ -97,9 +96,6 @@ func asString(v any) string {
 
 
 // Routes
-
-
-
 func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
@@ -108,88 +104,137 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
 	colDelegates := db.Collection("delegates")
 	colProofs := db.Collection("reserve_proofs")
+	colStats := db.Collection("statistics")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1) Load delegates (project only what we use)
+	// 1) Load delegates (include public_key for joining to statistics._id)
 	proj := bson.D{
 		{Key: "_id", Value: 0},
 		{Key: "public_address", Value: 1},
+		{Key: "public_key", Value: 1}, // <-- needed to join to statistics._id
 		{Key: "delegate_name", Value: 1},
 		{Key: "delegate_type", Value: 1},
 		{Key: "IP_address", Value: 1},
-		{Key: "shared_delegate_status", Value: 1},
 		{Key: "online_status", Value: 1},
 		{Key: "delegate_fee", Value: 1},
+
+		// Fallbacks (only used if statistics doc missing—though we now hard-fail)
 		{Key: "block_verifier_total_rounds", Value: 1},
 		{Key: "block_producer_total_rounds", Value: 1},
 		{Key: "block_verifier_online_percentage", Value: 1},
+
 		{Key: "total_vote_count", Value: 1}, // prefer this if present
 	}
 	cur, err := colDelegates.Find(ctx, bson.D{}, options.Find().SetProjection(proj))
 	if err != nil {
 		return c.JSON(ErrorResults{"Could not get the delegates registered"})
 	}
-	var docs []bson.M
-	if err := cur.All(ctx, &docs); err != nil {
+	var delegates []bson.M
+	if err := cur.All(ctx, &delegates); err != nil {
 		return c.JSON(ErrorResults{"Could not get the delegates registered"})
 	}
 
-	// 2) Pre-aggregate voters (and vote sums as fallback) from reserve_proofs
-	//    Group by public_address_voted_for -> { voters: count, sumVotes: sum(total_vote) }
+	// Build IN lists for proofs & stats
+	pubAddrs := make([]string, 0, len(delegates))
+	pubKeys := make([]string, 0, len(delegates))
+	for _, d := range delegates {
+		if pa := asString(d["public_address"]); pa != "" {
+			pubAddrs = append(pubAddrs, pa)
+		}
+		if pk := asString(d["public_key"]); pk != "" {
+			pubKeys = append(pubKeys, pk)
+		}
+	}
+
+	// 2) Aggregate voters/sumVotes from reserve_proofs
 	type aggRow struct {
-		ID        string      `bson:"_id"`
-		Voters    int32       `bson:"voters"`
-		SumVotes  interface{} `bson:"sumVotes"` // NumberLong/Decimal/etc.
+		ID       string      `bson:"_id"`
+		Voters   int32       `bson:"voters"`
+		SumVotes interface{} `bson:"sumVotes"`
 	}
-	var agg []aggRow
-	pipe := mongo.Pipeline{
-		bson.D{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: "$public_address_voted_for"},
-			{Key: "voters", Value: bson.D{{Key: "$sum", Value: 1}}},
-			{Key: "sumVotes", Value: bson.D{{Key: "$sum", Value: "$total_vote"}}},
-		}}},
-	}
-	if aCur, err := colProofs.Aggregate(ctx, pipe); err == nil {
-		_ = aCur.All(ctx, &agg)
-		_ = aCur.Close(ctx)
-	}
-	// Build quick lookup map
 	voterMap := make(map[string]struct {
 		voters   int
 		sumVotes int64
-	}, len(agg))
-	for _, r := range agg {
-		voterMap[r.ID] = struct {
-			voters   int
-			sumVotes int64
-		}{
-			voters:   int(r.Voters),
-			sumVotes: toInt64(r.SumVotes),
+	}, len(delegates))
+
+	if len(pubAddrs) > 0 {
+		pipe := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"public_address_voted_for": bson.M{"$in": pubAddrs}}}},
+			{{
+				Key: "$group",
+				Value: bson.D{
+					{Key: "_id", Value: "$public_address_voted_for"},
+					{Key: "voters", Value: bson.D{{Key: "$sum", Value: 1}}},
+					{Key: "sumVotes", Value: bson.D{{Key: "$sum", Value: "$total_vote"}}},
+				},
+			}},
+		}
+		if aCur, err := colProofs.Aggregate(ctx, pipe); err == nil {
+			var agg []aggRow
+			_ = aCur.All(ctx, &agg)
+			_ = aCur.Close(ctx)
+			for _, r := range agg {
+				voterMap[r.ID] = struct {
+					voters   int
+					sumVotes int64
+				}{
+					voters:   int(r.Voters),
+					sumVotes: toInt64(r.SumVotes),
+				}
+			}
 		}
 	}
 
-	// 3) Build output rows
-	out := make([]*v2XcashDpopsUnauthorizedDelegatesBasicData, 0, len(docs))
-	for _, it := range docs {
-		row := new(v2XcashDpopsUnauthorizedDelegatesBasicData)
+	// 3) Load statistics by _id (which equals delegates.public_key)
+	// Expected stats fields:
+	//   _id: <public_key>
+	//   block_verifier_total_rounds
+	//   block_verifier_online_total_rounds
+	//   block_producer_total_rounds
+	//   last_counted_block
+	statsMap := make(map[string]bson.M, len(delegates))
+	if len(pubKeys) > 0 {
+		statsCur, err := colStats.Find(ctx, bson.M{"_id": bson.M{"$in": pubKeys}},
+			options.Find().SetProjection(bson.D{
+				{Key: "_id", Value: 1}, // keep for lookup
+				{Key: "block_verifier_total_rounds", Value: 1},
+				{Key: "block_verifier_online_total_rounds", Value: 1},
+				{Key: "block_producer_total_rounds", Value: 1},
+				{Key: "last_counted_block", Value: 1},
+			}))
+		if err == nil {
+			var statsDocs []bson.M
+			if err := statsCur.All(ctx, &statsDocs); err == nil {
+				for _, s := range statsDocs {
+					if id := asString(s["_id"]); id != "" {
+						statsMap[id] = s
+					}
+				}
+			}
+		}
+	}
 
+	// 4) Build output (hard-fail if any delegate lacks statistics)
+	out := make([]*v2XcashDpopsUnauthorizedDelegatesBasicData, 0, len(delegates))
+	typesForSort := make([]string, 0, len(delegates))
+
+	for _, it := range delegates {
 		pubAddr := asString(it["public_address"])
-		row.DelegateName = asString(it["delegate_name"])
-		row.IPAdress = asString(it["IP_address"])
+		pubKey := asString(it["public_key"])
 
-		// shared_delegate_status can be "solo"/"shared" or bool
-		switch v := it["shared_delegate_status"].(type) {
-		case string:
-			row.SharedDelegate = (v != "solo")
-		case bool:
-			row.SharedDelegate = v
-		default:
-			row.SharedDelegate = false
+		// Require statistics for this delegate
+		s, ok := statsMap[pubKey]
+		if !ok {
+			return c.JSON(ErrorResults{"Statistics data not found for delegate"})
 		}
 
-		// online_status can be bool or string
+		row := new(v2XcashDpopsUnauthorizedDelegatesBasicData)
+		row.DelegateName = asString(it["delegate_name"])
+		row.IPAdress = asString(it["IP_address"])
+		row.DelegateType = asString(it["delegate_type"])
+
 		switch v := it["online_status"].(type) {
 		case bool:
 			row.Online = v
@@ -199,13 +244,9 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 			row.Online = false
 		}
 
-		// numeric fields (handle NumberLong, string, etc.)
 		row.Fee = int(toInt64(it["delegate_fee"]))
-		row.TotalRounds = int(toInt64(it["block_verifier_total_rounds"]))
-		row.TotalBlockProducerRounds = int(toInt64(it["block_producer_total_rounds"]))
-		row.OnlinePercentage = int(toInt64(it["block_verifier_online_percentage"]))
 
-		// Votes: prefer delegate.total_vote_count; fallback to reserve_proofs sum
+		// Votes
 		votes := toInt64(it["total_vote_count"])
 		if votes == 0 {
 			if v, ok := voterMap[pubAddr]; ok {
@@ -214,43 +255,34 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 		}
 		row.Votes = votes
 
-		// Voters: from reserve_proofs aggregation
+		// Voters
 		if v, ok := voterMap[pubAddr]; ok {
 			row.Voters = v.voters
 		} else {
 			row.Voters = 0
 		}
 
-		// Keep struct shape: no SeedNode now (remove logic; default false)
-		row.SeedNode = false
+		// Rounds & Online %
+		verifierTotal := toInt64(s["block_verifier_total_rounds"])
+		verifierOnline := toInt64(s["block_verifier_online_total_rounds"])
+		producerTotal := toInt64(s["block_producer_total_rounds"])
 
-		// Stash delegate_type for sorting (not in output struct; use local var)
-		itType := asString(it["delegate_type"])
-		// Attach as JSON field if your struct includes it; otherwise keep only for sort.
-		// If you want it in the response, add a field to v2XcashDpopsUnauthorizedDelegatesBasicData.
+		row.TotalRounds = int(verifierTotal)
+		row.TotalBlockProducerRounds = int(producerTotal)
+		if verifierTotal > 0 {
+			row.OnlinePercentage = int((verifierOnline * 100) / verifierTotal)
+		} else {
+			row.OnlinePercentage = 0
+		}
 
-		// Attach type temporarily via a map to keep sort simple
-		cType := itType
-		// Abuse the address field? No. Let's carry a parallel slice for types.
-		// We'll sort using a keyed comparator below; see sort closure.
-
-		// To keep it simple, we’ll append and rely on comparator closure capturing cType
-		rowCopy := *row
-		_ = cType // captured in comparator via index map built below
-		out = append(out, &rowCopy)
+		out = append(out, row)
+		typesForSort = append(typesForSort, row.DelegateType)
 	}
 
-	// Build a parallel slice of delegate_type for sorting (aligned by index)
-	types := make([]string, len(out))
-	for i, it := range docs {
-		types[i] = asString(it["delegate_type"])
-	}
-
-	// 4) Sort: delegate_type asc, Online true first, Votes desc
+	// 5) Sort: delegate_type asc, Online true first, Votes desc
 	sort.SliceStable(out, func(i, j int) bool {
-		ti, tj := types[i], types[j]
-		if ti != tj {
-			return ti < tj
+		if typesForSort[i] != typesForSort[j] {
+			return typesForSort[i] < typesForSort[j]
 		}
 		if out[i].Online != out[j].Online {
 			return out[i].Online // true first

@@ -329,19 +329,7 @@ type v1XcashDpopsUnauthorizedStats struct {
 	CurrentBlockVerifiersValidAmount              int    `json:"currentBlockVerifiersValidAmount"`
 }
 
-type v1XcashDpopsUnauthorizedDelegatesBasicData struct {
-	Votes                    int64  `json:"votes"`
-	Voters                   int    `json:"voters"`
-	IPAdress                 string `json:"IPAdress"`
-	DelegateName             string `json:"delegateName"`
-	SharedDelegate           bool   `json:"sharedDelegate"`
-	SeedNode                 bool   `json:"seedNode"`
-	Online                   bool   `json:"online"`
-	Fee                      int    `json:"fee"`
-	TotalRounds              int    `json:"totalRounds"`
-	TotalBlockProducerRounds int    `json:"totalBlockProducerRounds"`
-	OnlinePercentage         int    `json:"onlinePercentage"`
-}
+
 
 
 
@@ -351,14 +339,17 @@ type v2XcashDpopsUnauthorizedDelegatesBasicData struct {
 	Voters                   int    `json:"voters"`
 	IPAdress                 string `json:"IPAdress"`
 	DelegateName             string `json:"delegateName"`
-	SharedDelegate           bool   `json:"sharedDelegate"`
-	SeedNode                 bool   `json:"seedNode"`
+	DelegateType           	 string `json:"sharedDelegate"`
 	Online                   bool   `json:"online"`
 	Fee                      int    `json:"fee"`
 	TotalRounds              int    `json:"totalRounds"`
 	TotalBlockProducerRounds int    `json:"totalBlockProducerRounds"`
 	OnlinePercentage         int    `json:"onlinePercentage"`
 }
+
+
+
+
 
 type v1XcashDpopsUnauthorizedDelegatesData struct {
 	Votes                    int64  `json:"votes"`
