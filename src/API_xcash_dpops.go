@@ -20,99 +20,6 @@ import (
 )
 
 
-func varint_decode(s string) int64 {
-	// Variables
-	var varint int64
-	var length int = 0
-	var count int = 0
-	var counter int = 0
-	var bytecount int = 0
-	var number int64 = 1
-	var start int = 0
-	const BITS_IN_BYTE = 8
-
-	// convert the string to decimal
-	varint, _ = strconv.ParseInt(s, 16, 64)
-
-	// get the length
-	if varint <= 0xFF {
-		return varint
-	} else if varint > 0xFF && varint < 0xFFFF {
-		length = 2
-	} else if varint >= 0xFFFF && varint < 0xFFFFFF {
-		length = 3
-	} else if varint >= 0xFFFFFF && varint < 0xFFFFFFFF {
-		length = 4
-	} else if varint >= 0xFFFFFFFF && varint < 0xFFFFFFFFFF {
-		length = 5
-	} else if varint >= 0xFFFFFFFFFF && varint < 0xFFFFFFFFFFFF {
-		length = 6
-	} else if varint >= 0xFFFFFFFFFFFF && varint < 0xFFFFFFFFFFFFFF {
-		length = 7
-	} else {
-		length = 8
-	}
-
-	// create a byte array for the varint
-	bytes := make([]int8, length)
-
-	for count = 0; count < length; count++ {
-		// convert each byte to binary and read the bytes in reverse order
-		bytes[count] = int8(((varint >> (BITS_IN_BYTE * uint(count))) & 0xFF))
-	}
-
-	counter = (BITS_IN_BYTE - 1)
-	bytecount = 0
-	start = 0
-
-	for count = 0; count < length*BITS_IN_BYTE; count++ {
-		// loop through each bit until you find the first 1. for every bit after this:
-		// if 0 then number = number * 2;
-		// if 1 then number = (number * 2) + 1;
-		// dont use the bit if its the first bit
-		if counter != (BITS_IN_BYTE - 1) {
-			if (bytes[bytecount] & (1 << uint(counter))) != 0 {
-				if start == 1 {
-					number = (number * 2) + 1
-				}
-				start = 1
-			} else {
-				if start == 1 {
-					number = number * 2
-				}
-			}
-		}
-
-		if counter == 0 {
-			counter = (BITS_IN_BYTE - 1)
-			bytecount++
-		} else {
-			counter--
-		}
-	}
-	return number
-}
-
-func get_reserve_bytes(block_height int) string {
-	var database_data XcashDpopsReserveBytesCollection
-
-	// get the collection
-	block_height_data := strconv.Itoa(int(((block_height - XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT) / BLOCKS_PER_DAY_FIVE_MINUTE_BLOCK_TIME)) + 1)
-	collection_number := "reserve_bytes_" + block_height_data
-	collection := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection(collection_number)
-
-	// get the reserve bytes
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := collection.FindOne(ctx, bson.D{{"block_height", strconv.Itoa(block_height)}}).Decode(&database_data)
-	if err == mongo.ErrNoDocuments {
-		return ""
-	} else if err != nil {
-		return ""
-	}
-	return database_data.ReserveBytes
-}
-
 func get_delegate_address_from_name(delegate string) string {
 	var database_data XcashDpopsDelegatesCollection
 
@@ -149,8 +56,47 @@ func get_delegate_name_from_address(address string) string {
 	return database_data.DelegateName
 }
 
+func toInt64(v any) int64 {
+    switch t := v.(type) {
+    case int64:
+        return t
+    case int32:
+        return int64(t)
+    case int:
+        return int64(t)
+    case float64:
+        return int64(t)
+    case string:
+        if n, err := strconv.ParseInt(t, 10, 64); err == nil {
+            return n
+        }
+        return 0
+    case primitive.Decimal128:
+        bi, _, errDec := t.BigInt() // v1.17.6: (*big.Int, scale int, error)
+        if errDec != nil || bi == nil {
+            return 0
+        }
+        return bi.Int64()
+    default:
+        return 0
+    }
+}
 
 
+func asString(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
+}
+
+
+
+
+// Routes
 
 
 
@@ -322,42 +268,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 
 
 
-func toInt64(v any) int64 {
-    switch t := v.(type) {
-    case int64:
-        return t
-    case int32:
-        return int64(t)
-    case int:
-        return int64(t)
-    case float64:
-        return int64(t)
-    case string:
-        if n, err := strconv.ParseInt(t, 10, 64); err == nil {
-            return n
-        }
-        return 0
-    case primitive.Decimal128:
-        bi, _, errDec := t.BigInt() // v1.17.6: (*big.Int, scale int, error)
-        if errDec != nil || bi == nil {
-            return 0
-        }
-        return bi.Int64()
-    default:
-        return 0
-    }
-}
 
-
-func asString(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprint(v)
-}
 
 
 

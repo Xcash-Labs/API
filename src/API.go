@@ -85,14 +85,15 @@ func main() {
 
 	// setup xcash dpops routes
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/online/", v1_xcash_dpops_unauthorized_delegates_online)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/active/", v1_xcash_dpops_unauthorized_delegates_active)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/:delegateName/", v1_xcash_dpops_unauthorized_delegates)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/rounds/:delegateName", v1_xcash_dpops_unauthorized_delegates_rounds)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/votes/:delegateName/:start/:limit", v1_xcash_dpops_unauthorized_delegates_votes)
-	app.Get("/v1/xcash/dpops/unauthorized/votes/:address", v1_xcash_dpops_unauthorized_votes)
-	app.Get("/v1/xcash/dpops/unauthorized/rounds/:blockHeight", v1_xcash_dpops_unauthorized_rounds)
-	app.Get("/v1/xcash/dpops/unauthorized/lastBlockProducer", v1_xcash_dpops_unauthorized_last_block_producer)
+
+//	app.Get("/v1/xcash/dpops/unauthorized/delegates/online/", v1_xcash_dpops_unauthorized_delegates_online)
+//	app.Get("/v1/xcash/dpops/unauthorized/delegates/active/", v1_xcash_dpops_unauthorized_delegates_active)
+//	app.Get("/v1/xcash/dpops/unauthorized/delegates/:delegateName/", v1_xcash_dpops_unauthorized_delegates)
+//	app.Get("/v1/xcash/dpops/unauthorized/delegates/rounds/:delegateName", v1_xcash_dpops_unauthorized_delegates_rounds)
+//	app.Get("/v1/xcash/dpops/unauthorized/delegates/votes/:delegateName/:start/:limit", v1_xcash_dpops_unauthorized_delegates_votes)
+//	app.Get("/v1/xcash/dpops/unauthorized/votes/:address", v1_xcash_dpops_unauthorized_votes)
+//	app.Get("/v1/xcash/dpops/unauthorized/rounds/:blockHeight", v1_xcash_dpops_unauthorized_rounds)
+//	app.Get("/v1/xcash/dpops/unauthorized/lastBlockProducer", v1_xcash_dpops_unauthorized_last_block_producer)
 
 	// setup xpayment twitter routes
 	app.Get("/v1/xpayment-twitter/twitter/unauthorized/stats/", v1_xpayment_twitter_unauthorized_stats)
