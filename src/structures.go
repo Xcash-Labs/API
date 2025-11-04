@@ -265,7 +265,7 @@ type v1XcashBlockchainUnauthorizedStats struct {
 	InflationTime          int    `json:"inflationTime"`
 }
 
-type v1XcashBlockchainUnauthorizedBlocksBlockHeight struct {
+type v2XcashBlockchainUnauthorizedBlocksBlockHeight struct {
 	Height       int      `json:"height"`
 	Hash         string   `json:"hash"`
 	Reward       int64    `json:"reward"`
