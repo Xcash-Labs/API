@@ -12,71 +12,70 @@ import (
 )
 
 func main() {
-
-	// setup the mongodb connection
-
-	fmt.Println("Hello, world!")
-
 	user := os.Getenv("MONGODB_READ_USERNAME")
 	pass := os.Getenv("MONGODB_READ_PASSWORD")
-	const caPath   = "/etc/ssl/mongodb/mongodb.crt" // CA cert to verify server
-	const certPath = "/etc/ssl/mongodb/mongodb.pem" // client cert (PEM, contains cert)
-	const keyPath  = "/etc/ssl/mongodb/mongodb.pem" // client key (PEM, same file if combined)
-	const mongoTLSHost = "seeds.xcashseeds.us"
-
 	if user == "" || pass == "" {
-		log.Fatal("Mongo env missing: set MONGODB_READ_USERNAME and MONGODB_READ_PASSWORD")
+		log.Fatal("Missing MongoDB_READ_USERNAME or MongoDB_READ_PASSWORD")
 	}
 
-	// --- Build tls.Config with CA + client cert ---
+	const (
+		host    = "seeds.xcashseeds.us"                     // primary read node
+		caPath  = "/etc/ssl/mongodb/mongodb.crt"            // shared self-signed cert
+		appName = "xcash-api-read"
+	)
+
+	// --- TLS config using the same cert you already deploy on all nodes ---
 	caPEM, err := os.ReadFile(caPath)
-	if err != nil { log.Fatalf("read CA: %v", err) }
+	if err != nil {
+		log.Fatalf("read CA: %v", err)
+	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(caPEM) {
 		log.Fatal("bad CA PEM")
 	}
 
-	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-	if err != nil { log.Fatalf("load client keypair: %v", err) }
-
 	tlsCfg := &tls.Config{
-		MinVersion:   tls.VersionTLS12,
-		RootCAs:      pool,
-		Certificates: []tls.Certificate{cert},
-		ServerName:   mongoTLSHost,
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    pool,
+		ServerName: host, // must match DNS SAN in your cert
 	}
 
-	uri := "mongodb://localhost:27017/?" + "directConnection=true&tls=true&retryReads=true&appName=xcash-api"
+	// --- Direct connection to a single node (read-only) ---
+	uri := "mongodb://" + host + ":27017/?" +
+		"tls=true&directConnection=true&authSource=admin&appName=" + appName
 
 	clientOpts := options.Client().
 		ApplyURI(uri).
-		SetTLSConfig(tlsCfg)
-
-	if user != "" && pass != "" {
-		clientOpts.SetAuth(options.Credential{
+		SetTLSConfig(tlsCfg).
+		SetAuth(options.Credential{
 			AuthSource: "admin",
 			Username:   user,
 			Password:   pass,
-			Mechanism: "SCRAM-SHA-256",
+			Mechanism:  "SCRAM-SHA-256",
 		})
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cl, err := mongo.Connect(ctx, clientOpts)
-	if err != nil { log.Fatalf("mongo connect: %v", err) }
-	if err := cl.Ping(ctx, nil); err != nil { log.Fatalf("mongo ping: %v", err) }
-
-	log.Println("MongoDB connected (hard-coded TLS, direct/local)")
-
-	if mongoClienterror != nil {
-		os.Exit(0)
+	client, err := mongo.Connect(ctx, clientOpts)
+	if err != nil {
+		log.Fatalf("connect: %v", err)
 	}
 
+	// For a read-only client, prefer readable nodes (primary or secondary)
+	ctxPing, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelPing()
+	if err := client.Ping(ctxPing, readpref.SecondaryPreferred()); err != nil {
+		log.Fatalf("ping: %v", err)
+	}
+
+	log.Println("MongoDB connected (direct TLS read-only)")
+
 	defer func() {
-		if mongoClienterror = mongoClient.Disconnect(context.TODO()); mongoClienterror != nil {
-			os.Exit(0)
+		ctxDisc, cancelDisc := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelDisc()
+		if err := client.Disconnect(ctxDisc); err != nil {
+			log.Printf("disconnect error: %v", err)
 		}
 	}()
 
