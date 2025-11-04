@@ -67,6 +67,7 @@ func main() {
 	}
 
 	log.Println("MongoDB connected (direct TLS read-only)")
+	mongoClient = client
 
 	defer func() {
 		ctxDisc, cancelDisc := context.WithTimeout(context.Background(), 5*time.Second)
@@ -76,12 +77,10 @@ func main() {
 		}
 	}()
 
-	mongoClient = client                  // make it visible to existing handlers
 	app := fiber.New(fiber.Config{
 		Prefork:               false,
 		DisableStartupMessage: true,
 	})
-	app.Locals("mongo", mongoClient)      // also expose via Fiber locals
 
 	// setup blockchain routes
 	app.Get("/v1/xcash/blockchain/unauthorized/stats/", v1_xcash_blockchain_unauthorized_stats)
