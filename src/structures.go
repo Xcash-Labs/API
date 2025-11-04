@@ -411,6 +411,7 @@ type V2RoundMember struct {
 type V2RoundWinner struct {
 	PublicAddress string `json:"publicAddress"`
 	VrfPublicKey  string `json:"vrfPublicKey"`
+	DelegateName  string `json:"delegateName,omitempty"`
 }
 
 type V2RoundData struct {

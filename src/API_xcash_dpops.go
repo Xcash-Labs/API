@@ -661,6 +661,21 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 			PublicAddress: asString(w["public_address"]),
 			VrfPublicKey:  binToB64(w["vrf_public_key"]),
 		}
+		// Look up delegate_name by public_address
+		if out.Winner.PublicAddress != "" {
+			colDelegates := db.Collection("delegates") // same DB you used above
+			var d bson.M
+			if err := colDelegates.FindOne(
+				ctx,
+				bson.D{{Key: "public_address", Value: out.Winner.PublicAddress}},
+				options.FindOne().SetProjection(bson.D{
+					{Key: "_id", Value: 0},
+					{Key: "delegate_name", Value: 1},
+				}),
+			).Decode(&d); err == nil {
+				out.Winner.DelegateName = asString(d["delegate_name"])
+			}
+		}
 	}
 
 	// block_verifiers array
