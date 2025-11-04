@@ -84,8 +84,7 @@ func main() {
 	app.Post("/v1/xcash/blockchain/unauthorized/address/createIntegrated/", v1_xcash_blockchain_unauthorized_address_create_integrated)
 
 	// setup xcash dpops routes
-	app.Get("/v2/xcash/dpops/unauthorized/stats/", v2_xcash_dpops_unauthorized_stats)
-	app.Get("/v1/xcash/dpops/unauthorized/delegates/registered/", v1_xcash_dpops_unauthorized_delegates_registered)
+	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
 	app.Get("/v1/xcash/dpops/unauthorized/delegates/online/", v1_xcash_dpops_unauthorized_delegates_online)
 	app.Get("/v1/xcash/dpops/unauthorized/delegates/active/", v1_xcash_dpops_unauthorized_delegates_active)
 	app.Get("/v1/xcash/dpops/unauthorized/delegates/:delegateName/", v1_xcash_dpops_unauthorized_delegates)
