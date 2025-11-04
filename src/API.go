@@ -16,46 +16,36 @@ import (
 var mongoClient *mongo.Client
 
 func main() {
-	user := os.Getenv("MONGODB_READ_USERNAME")
-	pass := os.Getenv("MONGODB_READ_PASSWORD")
-	if user == "" || pass == "" {
-		log.Fatal("Missing MongoDB_READ_USERNAME or MongoDB_READ_PASSWORD")
-	}
+	host   := "127.0.0.1"
+	uri    := "mongodb://" + host + ":27017/?" +
+			"directConnection=true&serverSelectionTimeoutMS=2000&authSource=admin&tls=true&appName=xcash-api-read"
 
-	const (
-		host    = "seeds.xcashseeds.us"                     // primary read node
-		caPath  = "/etc/ssl/mongodb/mongodb.crt"            // shared self-signed cert
-		appName = "xcash-api-read"
-	)
+	caPath   := "/etc/ssl/mongodb/mongodb.crt"
+	pemPath  := "/etc/ssl/mongodb/mongodb.pem"
 
-	// --- TLS config using the same cert you already deploy on all nodes ---
 	caPEM, err := os.ReadFile(caPath)
-	if err != nil {
-		log.Fatalf("read CA: %v", err)
-	}
+	if err != nil { log.Fatalf("read CA: %v", err) }
 	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(caPEM) {
-		log.Fatal("bad CA PEM")
-	}
+	if !pool.AppendCertsFromPEM(caPEM) { log.Fatal("bad CA PEM") }
+
+	clientCert, err := tls.LoadX509KeyPair(pemPath, pemPath)
+	if err != nil { log.Fatalf("load client keypair: %v", err) }
 
 	tlsCfg := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		RootCAs:    pool,
-		ServerName: host, // must match DNS SAN in your cert
+		MinVersion:   tls.VersionTLS12,
+		RootCAs:      pool,
+		Certificates: []tls.Certificate{clientCert}, 
+		ServerName:   host,
 	}
-
-	// --- Direct connection to a single node (read-only) ---
-	uri := "mongodb://" + host + ":27017/?" +
-		"tls=true&directConnection=true&authSource=admin&appName=" + appName
 
 	clientOpts := options.Client().
 		ApplyURI(uri).
 		SetTLSConfig(tlsCfg).
 		SetAuth(options.Credential{
-			AuthSource: "admin",
-			Username:   user,
-			Password:   pass,
-			AuthMechanism:  "SCRAM-SHA-256",
+			AuthSource:    "admin",
+			Username:      os.Getenv("MONGODB_READ_USERNAME"),
+			Password:      os.Getenv("MONGODB_READ_PASSWORD"),
+			AuthMechanism: "SCRAM-SHA-256",
 		})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
