@@ -700,7 +700,7 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 
 
 
-func v1_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
+func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 	// DB required
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
