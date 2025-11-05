@@ -281,24 +281,6 @@ type V2daemonGetHeight struct {
 
 // XCASH DPOPS
 
-type v2XcashDpopsUnauthorizedStats struct {
-	MostTotalRoundsDelegateName                   string `json:"mostTotalRoundsDelegateName"`
-	MostTotalRounds                               int    `json:"mostTotalRounds"`
-	BestBlockVerifierOnlinePercentageDelegateName string `json:"bestBlockVerifierOnlinePercentageDelegateName"`
-	BestBlockVerifierOnlinePercentage             int    `json:"bestBlockVerifierOnlinePercentage"`
-	MostBlockProducerTotalRoundsDelegateName      string `json:"mostBlockProducerTotalRoundsDelegateName"`
-	MostBlockProducerTotalRounds                  int    `json:"mostBlockProducerTotalRounds"`
-	TotalVotes                                    int64  `json:"totalVotes"`
-	TotalVoters                                   int    `json:"totalVoters"`
-	AverageVote                                   int64  `json:"averageVote"`
-	VotePercentage                                int    `json:"votePercentage"`
-	RoundNumber                                   int    `json:"roundNumber"`
-	TotalRegisteredDelegates                      int    `json:"totalRegisteredDelegates"`
-	TotalOnlineDelegates                          int    `json:"totalOnlineDelegates"`
-	CurrentBlockVerifiersMaximumAmount            int    `json:"currentBlockVerifiersMaximumAmount"`
-	CurrentBlockVerifiersValidAmount              int    `json:"currentBlockVerifiersValidAmount"`
-}
-
 type v2XcashDpopsUnauthorizedDelegatesBasicData struct {
 	Votes                    int64  `json:"votes"`
 	Voters                   int    `json:"voters"`
