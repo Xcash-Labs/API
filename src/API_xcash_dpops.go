@@ -9,6 +9,7 @@ import (
 	"time"
     "fmt"
 	"encoding/base64"
+	"encoding/json"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
@@ -810,7 +811,7 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 
 	// --- Circulating supply calculation ---
 	// Start at premine + first block reward
-	var generatedSupply int64 = FIRST_BLOCK_MINING_REWARD + XCASH_PREMINE_TOTAL_SUPPLY
+	var generatedSupply int64 = int64(FIRST_BLOCK_MINING_REWARD) + int64(XCASH_PREMINE_TOTAL_SUPPLY)
 	// Loop from block 2 to current-1 (your original started at 2)
 	for h := 2; h < chainHeight; h++ {
 		if h < XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT {
