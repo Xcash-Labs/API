@@ -811,8 +811,7 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 
 	// --- Circulating supply calculation ---
 	// Start at premine + first block reward
-	var generatedSupply int64 = FIRST_BLOCK_MINING_REWARD + XCASH_PREMINE_TOTAL_SUPPLY
-	// Loop from block 2 to current-1 (your original started at 2)
+	generatedSupply := FIRST_BLOCK_MINING_REWARD + XCASH_PREMINE_TOTAL_SUPPLY
 	for h := 2; h < chainHeight; h++ {
 		if h < XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT {
 			generatedSupply += (XCASH_TOTAL_SUPPLY - generatedSupply) / XCASH_EMMISION_FACTOR
@@ -820,14 +819,15 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 			generatedSupply += (XCASH_TOTAL_SUPPLY - generatedSupply) / XCASH_DPOPS_EMMISION_FACTOR
 		}
 	}
-	// Subtract non-circulating premine and scale to atomic units
-	circulatingSupplyAtomic := int64(
-		(generatedSupply - (XCASH_PREMINE_TOTAL_SUPPLY - XCASH_PREMINE_CIRCULATING_SUPPLY)) *
-			XCASH_WALLET_DECIMAL_PLACES_AMOUNT,
-	)
+
+	// convert to atomic units once, at the end
+	premineNonCirc := XCASH_PREMINE_TOTAL_SUPPLY - XCASH_PREMINE_CIRCULATING_SUPPLY
+	circulatingSupplyAtomic := int64(math.Round(
+		(generatedSupply - premineNonCirc) * XCASH_WALLET_DECIMAL_PLACES_AMOUNT,
+	))
 	if circulatingSupplyAtomic < 1 {
-		circulatingSupplyAtomic = 1 // avoid div-by-zero later
-	}
+		circulatingSupplyAtomic = 1 // guard
+	}}
 
 	// --- Total voters across reserve_proofs_N collections ---
 	totalVoters := 0
