@@ -38,3 +38,17 @@ func send_http_data(url string, data string) (string, error) {
 
 	return string(body), nil
 }
+
+func send_http_get(url string) (string, error) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
