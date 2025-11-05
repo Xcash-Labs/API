@@ -75,7 +75,6 @@ func main() {
 	// setup blockchain routes
 	app.Get("/v2/xcash/blockchain/unauthorized/blocks/", v2_xcash_blockchain_unauthorized_blocks_blockHeight)
 	app.Get("/v2/xcash/blockchain/unauthorized/blocks/:blockheight/", v2_xcash_blockchain_unauthorized_blocks_blockHeight)
-	app.Get("/v2/xcash/blockchain/unauthorized/currentblockheight/", v2_xcash_blockchain_unauthorized_blocks_currentblockHeight)
 	app.Get("/v2/xcash/blockchain/unauthorized/height/", v2_xcash_blockchain_unauthorized_height)
 
 	// setup xcash dpops routes
