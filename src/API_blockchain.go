@@ -15,6 +15,11 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 		reqHeightStr = strings.TrimSpace(c.Params("blockHeight"))
 	)
 
+	// Also allow query (?blockHeight= or ?height=)
+	if reqHeightStr == "" {
+		reqHeightStr = strings.TrimSpace(c.Query("blockHeight"))
+	}
+
 	// 1) Determine height (default: latest-1)
 	if reqHeightStr == "" {
 		dataSend, err := send_http_data("http://127.0.0.1:18281/json_rpc", `{"jsonrpc":"2.0","id":"0","method":"get_info"}`)
@@ -47,15 +52,15 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	}
 
 	// 3) Parse embedded block JSON to get tx list (best-effort)
-	var txHashes []string
+	txHashes := make([]string, 0)
 	if block.Result.JSON != "" {
 		raw := block.Result.JSON
 
-		// If the daemon returned JSON as a quoted string with escapes, unquote it safely.
+		// Safely unquote if it is a quoted JSON string
 		if uq, err := strconv.Unquote(raw); err == nil {
 			raw = uq
 		} else {
-			// fallback (older approach)
+			// fallback cleanup
 			raw = strings.ReplaceAll(raw, `\n`, "")
 			raw = strings.ReplaceAll(raw, `\`, "")
 		}
@@ -67,14 +72,14 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	}
 
 	// 4) Compute DPoPS flag: first DPoPS block is height 3
-	h := block.Result.BlockHeader.Height // (int)
+	h := block.Result.BlockHeader.Height // int
 	xcashDPOPS := h >= 3
 
-	// 5) Build response using your existing struct types directly
+	// 5) Build response using your existing struct
 	out.Height = h
 	out.Hash = block.Result.BlockHeader.Hash
-	out.Reward = block.Result.BlockHeader.Reward // (int64)
-	out.Time = block.Result.BlockHeader.Timestamp // (int)
+	out.Reward = block.Result.BlockHeader.Reward    // int64
+	out.Time = block.Result.BlockHeader.Timestamp   // int
 	out.XcashDPOPS = xcashDPOPS
 	out.TxHashes = txHashes
 

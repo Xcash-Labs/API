@@ -271,7 +271,7 @@ type v2XcashBlockchainUnauthorizedBlocksBlockHeight struct {
 	Reward       int64    `json:"reward"`
 	Time         int      `json:"time"`
 	XcashDPOPS   bool     `json:"xcashDPOPS"`
-	TxHashes     []string `json:"tx"`
+	TxHashes     []string `json:"TxHashes"`
 }
 
 type V2daemonGetHeight struct {
