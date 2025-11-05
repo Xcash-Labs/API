@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb."
 )
 
 func get_current_block_height() int {
@@ -84,17 +85,15 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 
-	psDB := mongoClient.Database(XCASH_DPOPS_DATABASE) // == "XCASH_PROOF_OF_STAKE"
+	psDB := mongoClient.Database(XCASH_DPOPS_DATABASE) // "XCASH_PROOF_OF_STAKE"
 	colRounds := psDB.Collection("consensus_rounds")
 
 	bh := int64(block.Result.BlockHeader.Height)
 	var roundDoc bson.M
-	findRound := options.FindOne().
-		SetReadPreference(readpref.Primary()).
-		SetProjection(bson.D{
-			{Key: "_id", Value: 0},
-			{Key: "winner", Value: 1}, // winner.public_address (string), winner.vrf_public_key (bin)
-		})
+	findRound := options.FindOne().SetProjection(bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "winner", Value: 1}, // winner.public_address (string), winner.vrf_public_key (bin)
+	})
 
 	roundErr := colRounds.FindOne(ctx, bson.D{{Key: "block_height", Value: bh}}, findRound).Decode(&roundDoc)
 	xcashDPOPS := (roundErr == nil)
