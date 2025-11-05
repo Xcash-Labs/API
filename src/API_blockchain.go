@@ -82,8 +82,7 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 }
 
 func v2_xcash_blockchain_unauthorized_height(c *fiber.Ctx) error {
-	dataSend, err := send_http_data(
-	data, err := sendHTTPGet("http://127.0.0.1:18281/get_height")
+	dataSend, err := send_http_data("http://127.0.0.1:18281/get_height")
 	if err != nil {
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "daemon unreachable"})
 	}
@@ -91,7 +90,7 @@ func v2_xcash_blockchain_unauthorized_height(c *fiber.Ctx) error {
 		Height int    `json:"height"`
 		Status string `json:"status"`
 	}
-	if json.Unmarshal([]byte(data), &gh) != nil || gh.Status != "OK" || gh.Height <= 0 {
+	if json.Unmarshal([]byte(dataSend), &gh) != nil || gh.Status != "OK" || gh.Height <= 0 {
 		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "invalid daemon response"})
 	}
 	return c.JSON(fiber.Map{"height": gh.Height})
