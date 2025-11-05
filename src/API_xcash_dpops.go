@@ -701,17 +701,18 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 
 
 func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
-	// --- Basic DB guard ---
+	// DB required
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
 	}
 
-	// --- RPC: get_block_count ---
+	// --- RPC: get_block_count on 18281 ---
 	type rpcBlockCount struct {
 		Result struct {
 			Count int `json:"count"`
 		} `json:"result"`
 	}
+
 	dataSend, err := send_http_data(
 		"http://127.0.0.1:18281/json_rpc",
 		`{"jsonrpc":"2.0","id":"0","method":"get_block_count"}`,
@@ -725,14 +726,15 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 	}
 	chainHeight := bc.Result.Count
 
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
-	defer cancel()
-
+	// --- Collections & ctx ---
 	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
 	colDelegates := db.Collection("delegates")
 	colStats := db.Collection("statistics")
 
-	// --- Load single statistics doc (best-effort) ---
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+
+	// --- Stats document (best-effort) ---
 	var statsDoc struct {
 		MostTotalRoundsDelegateName                   string `bson:"MostTotalRoundsDelegateName"`
 		MostTotalRounds                               string `bson:"MostTotalRounds"`
@@ -751,29 +753,27 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 			{Key: "MostBlockProducerTotalRoundsDelegateName", Value: 1},
 			{Key: "MostBlockProducerTotalRounds", Value: 1},
 		}),
-	).Decode(&statsDoc) // ok if missing; we’ll default zeros/empty
+	).Decode(&statsDoc) // ok if missing
 
-	// --- Delegates: counts, total votes, online count ---
-	// Count total registered delegates
+	// --- Delegates: totals (project minimal fields) ---
 	totalDelegates64, err := colDelegates.CountDocuments(ctx, bson.D{})
 	if err != nil {
 		return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
 	}
 	totalDelegates := int(totalDelegates64)
 
-	// Iterate delegates to aggregate vote total and online count, but project only the fields we need
 	cur, err := colDelegates.Find(ctx, bson.D{}, options.Find().
 		SetProjection(bson.D{
 			{Key: "_id", Value: 0},
-			{Key: "total_vote_count", Value: 1}, // often string in your schema
-			{Key: "online_status", Value: 1},    // "true"/"false" or bool
+			{Key: "total_vote_count", Value: 1}, // string/number
+			{Key: "online_status", Value: 1},    // string/bool
 		}))
 	if err != nil {
 		return c.JSON(ErrorResults{"Could not get the xcash dpops statistics"})
 	}
 	defer cur.Close(ctx)
 
-	var totalVotes int64
+	var totalVotesAtomic int64
 	onlineCount := 0
 
 	for cur.Next(ctx) {
@@ -781,21 +781,21 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 		if err := cur.Decode(&m); err != nil {
 			continue
 		}
-		// total_vote_count may be string or numeric depending on writer
+		// total_vote_count aggregation
 		switch v := m["total_vote_count"].(type) {
 		case string:
 			if n, e := strconv.ParseInt(v, 10, 64); e == nil {
-				totalVotes += n
+				totalVotesAtomic += n
 			}
 		case int32:
-			totalVotes += int64(v)
+			totalVotesAtomic += int64(v)
 		case int64:
-			totalVotes += v
+			totalVotesAtomic += v
 		case float64:
-			totalVotes += int64(v)
+			totalVotesAtomic += int64(v)
 		}
 
-		// online_status could be string "true"/"false" or bool
+		// online_status aggregation
 		switch s := m["online_status"].(type) {
 		case string:
 			if s == "true" || s == "1" || strings.EqualFold(s, "yes") {
@@ -807,66 +807,62 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 			}
 		}
 	}
-	// (ignore cur.Err for resiliency; optional: check and return)
+	// ignore cur.Err() for resilience; add check if you want strictness
 
-	// --- Circulating supply calculation ---
-	// Start at premine + first block reward
-	generatedSupply := FIRST_BLOCK_MINING_REWARD + XCASH_PREMINE_TOTAL_SUPPLY
+	// --- Circulating supply (ALL int64, atomic units) ---
+	generatedSupply := FIRST_BLOCK_MINING_REWARD_ATOMIC + XCASH_PREMINE_TOTAL_SUPPLY_ATOMIC
+	totalSupply := XCASH_TOTAL_SUPPLY_ATOMIC
+	emmFactor := XCASH_EMMISION_FACTOR
+	dpopsFactor := XCASH_DPOPS_EMMISION_FACTOR
+
+	// Iterate from block 2 to current-1 (matches your legacy)
 	for h := 2; h < chainHeight; h++ {
 		if h < XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT {
-			generatedSupply += (XCASH_TOTAL_SUPPLY - generatedSupply) / XCASH_EMMISION_FACTOR
+			generatedSupply += (totalSupply - generatedSupply) / emmFactor
 		} else {
-			generatedSupply += (XCASH_TOTAL_SUPPLY - generatedSupply) / XCASH_DPOPS_EMMISION_FACTOR
+			generatedSupply += (totalSupply - generatedSupply) / dpopsFactor
 		}
 	}
 
-	// convert to atomic units once, at the end
-	premineNonCirc := XCASH_PREMINE_TOTAL_SUPPLY - XCASH_PREMINE_CIRCULATING_SUPPLY
-	circulatingSupplyAtomic := int64(math.Round(
-		(generatedSupply - premineNonCirc) * XCASH_WALLET_DECIMAL_PLACES_AMOUNT,
-	))
+	circulatingSupplyAtomic := generatedSupply - (XCASH_PREMINE_TOTAL_SUPPLY_ATOMIC - XCASH_PREMINE_CIRCULATING_SUPPLY_ATOMIC)
 	if circulatingSupplyAtomic < 1 {
-		circulatingSupplyAtomic = 1 // guard
-	}}
+		circulatingSupplyAtomic = 1 // guard for percentage calc
+	}
 
-	// --- Total voters across reserve_proofs_N collections ---
+	// --- Total voters across reserve_proofs_1..N ---
 	totalVoters := 0
-	for i := 1; i <= TOTAL_RESERVE_PROOFS_DATABASES; i++ {
+	for i := 1; i <= TOTAL_RESERVE_PROOFS_DATABASES; i++ { // include last DB
 		colName := "reserve_proofs_" + strconv.Itoa(i)
-		cnt, err := db.Collection(colName).CountDocuments(ctx, bson.D{})
-		if err == nil {
+		if cnt, err := db.Collection(colName).CountDocuments(ctx, bson.D{}); err == nil {
 			totalVoters += int(cnt)
 		}
 	}
 
-	// --- Fill output ---
 	var out v2XcashDpopsUnauthorizedStats
 
 	out.MostTotalRoundsDelegateName = statsDoc.MostTotalRoundsDelegateName
 	if n, e := strconv.Atoi(statsDoc.MostTotalRounds); e == nil {
 		out.MostTotalRounds = n
 	}
-
 	out.BestBlockVerifierOnlinePercentageDelegateName = statsDoc.BestBlockVerifierOnlinePercentageDelegateName
 	if n, e := strconv.Atoi(statsDoc.BestBlockVerifierOnlinePercentage); e == nil {
 		out.BestBlockVerifierOnlinePercentage = n
 	}
-
 	out.MostBlockProducerTotalRoundsDelegateName = statsDoc.MostBlockProducerTotalRoundsDelegateName
 	if n, e := strconv.Atoi(statsDoc.MostBlockProducerTotalRounds); e == nil {
 		out.MostBlockProducerTotalRounds = n
 	}
 
-	out.TotalVotes = totalVotes
+	out.TotalVotes = totalVotesAtomic
 	out.TotalVoters = totalVoters
 	if totalVoters > 0 {
-		out.AverageVote = totalVotes / int64(totalVoters)
+		out.AverageVote = totalVotesAtomic / int64(totalVoters)
 	} else {
 		out.AverageVote = 0
 	}
 
-	// Vote % = totalVotes / circulatingSupplyAtomic * 100 (clamped 0..100)
-	vp := int((float64(totalVotes) / float64(circulatingSupplyAtomic)) * 100.0)
+	// Vote % = votes / circulating * 100 (both atomic units)
+	vp := int((float64(totalVotesAtomic) / float64(circulatingSupplyAtomic)) * 100.0)
 	if vp < 0 {
 		vp = 0
 	} else if vp > 100 {
@@ -874,7 +870,7 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 	}
 	out.VotePercentage = vp
 
-	// Round number = currentHeight - DPOPS height (never negative)
+	// Round number (never negative)
 	rn := chainHeight - XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT
 	if rn < 0 {
 		rn = 0
