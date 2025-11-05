@@ -1,21 +1,17 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"strconv"
 	"strings"
-	"time"
-
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Handlers
 
-func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
+ffunc v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	var (
+		out          v2XcashBlockchainUnauthorizedBlocksBlockHeight
 		reqHeightStr = strings.TrimSpace(c.Params("blockHeight"))
 	)
 
@@ -50,38 +46,37 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 		return c.JSON(ErrorResults{"Could not get the block data"})
 	}
 
-	// 3) Parse embedded JSON to get tx list (best-effort)
+	// 3) Parse embedded block JSON to get tx list (best-effort)
 	var txHashes []string
 	if block.Result.JSON != "" {
-		// Unescape and decode the embedded block JSON
-		raw := strings.ReplaceAll(block.Result.JSON, `\n`, "")
-		raw = strings.ReplaceAll(raw, `\`, "")
+		raw := block.Result.JSON
+
+		// If the daemon returned JSON as a quoted string with escapes, unquote it safely.
+		if uq, err := strconv.Unquote(raw); err == nil {
+			raw = uq
+		} else {
+			// fallback (older approach)
+			raw = strings.ReplaceAll(raw, `\n`, "")
+			raw = strings.ReplaceAll(raw, `\`, "")
+		}
+
 		var bj BlockchainBlockJson
 		if err := json.Unmarshal([]byte(raw), &bj); err == nil {
 			txHashes = bj.TxHashes
 		}
 	}
 
-	// 4) Compute DPoPS flag purely by height: first DPoPS block is height 3
-	h := block.Result.BlockHeader.Height
-	xcashDPOPS := h > XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT
+	// 4) Compute DPoPS flag: first DPoPS block is height 3
+	h := block.Result.BlockHeader.Height // (int)
+	xcashDPOPS := h >= 3
 
-	// 5) Build and return response (no delegateName)
-	resp := struct {
-		Height     uint64   `json:"height"`
-		Hash       string   `json:"hash"`
-		Reward     uint64   `json:"reward"`
-		Time       uint64   `json:"time"`
-		XcashDPOPS bool     `json:"xcashDPOPS"`
-		Tx         []string `json:"tx"`
-	}{
-		Height:     h,
-		Hash:       block.Result.BlockHeader.Hash,
-		Reward:     block.Result.BlockHeader.Reward,
-		Time:       block.Result.BlockHeader.Timestamp,
-		XcashDPOPS: xcashDPOPS,
-		Tx:         txHashes,
-	}
+	// 5) Build response using your existing struct types directly
+	out.Height = h
+	out.Hash = block.Result.BlockHeader.Hash
+	out.Reward = block.Result.BlockHeader.Reward // (int64)
+	out.Time = block.Result.BlockHeader.Timestamp // (int)
+	out.XcashDPOPS = xcashDPOPS
+	out.Tx = txHashes
 
-	return c.JSON(resp)
+	return c.JSON(out)
 }
