@@ -807,20 +807,22 @@ func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
 			}
 		}
 	}
-	// ignore cur.Err() for resilience; add check if you want strictness
 
-	// --- Circulating supply (ALL int64, atomic units) ---
+	// --- Circulating supply (ALL int64, atomic units)
 	generatedSupply := FIRST_BLOCK_MINING_REWARD_ATOMIC + XCASH_PREMINE_TOTAL_SUPPLY_ATOMIC
 	totalSupply := XCASH_TOTAL_SUPPLY_ATOMIC
-	emmFactor := XCASH_EMMISION_FACTOR
-	dpopsFactor := XCASH_DPOPS_EMMISION_FACTOR
 
-	// Iterate from block 2 to current-1 (matches your legacy)
+	// Make factors int64 to match supply types
+	emmFactor64   := int64(XCASH_EMMISION_FACTOR)
+	dpopsFactor64 := int64(XCASH_DPOPS_EMMISION_FACTOR)
+
+	// Iterate from block 2 to current-1
 	for h := 2; h < chainHeight; h++ {
 		if h < XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT {
-			generatedSupply += (totalSupply - generatedSupply) / emmFactor
+			// both operands int64 → OK
+			generatedSupply += (totalSupply - generatedSupply) / emmFactor64
 		} else {
-			generatedSupply += (totalSupply - generatedSupply) / dpopsFactor
+			generatedSupply += (totalSupply - generatedSupply) / dpopsFactor64
 		}
 	}
 
