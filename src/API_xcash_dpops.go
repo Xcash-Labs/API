@@ -690,3 +690,159 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 
 	return c.JSON(out)
 }
+
+func v2_xcash_dpops_unauthorized_stats(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
+	colDelegates := db.Collection("delegates")
+	colProofs := db.Collection("reserve_proofs")
+
+	// 1) Aggregate reserve_proofs by public_address_voted_for
+	type grpRow struct {
+		ID     string `bson:"_id"` // public_address_voted_for
+		Voters int32  `bson:"voters"`
+		Votes  int64  `bson:"votes"`
+	}
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$public_address_voted_for"},
+			{Key: "voters", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "votes", Value: bson.D{{Key: "$sum", Value: "$total_vote"}}},
+		}}},
+	}
+
+	cur, err := colProofs.Aggregate(ctx, pipeline)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "proof aggregation failed"})
+	}
+	var grouped []grpRow
+	if err := cur.All(ctx, &grouped); err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "proof aggregation decode failed"})
+	}
+
+	// Build a quick lookup: voted_for_address -> {voters, votes}
+	type vv struct{ voters int; votes int64 }
+	vmap := make(map[string]vv, len(grouped))
+	for _, g := range grouped {
+		vmap[g.ID] = vv{voters: int(g.Voters), votes: g.Votes}
+	}
+
+	// 2) Load delegates (just needed fields)
+	dcur, err := colDelegates.Find(ctx, bson.D{}, options.Find().SetProjection(bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "public_address", Value: 1},
+		{Key: "IP_address", Value: 1},
+		{Key: "delegate_name", Value: 1},
+		{Key: "delegate_type", Value: 1},
+		{Key: "online_status", Value: 1},
+		{Key: "delegate_fee", Value: 1},
+		{Key: "total_vote_count", Value: 1}, // fallback if needed
+	}))
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "delegates query failed"})
+	}
+	defer dcur.Close(ctx)
+
+	toBool := func(v any) bool {
+		switch t := v.(type) {
+		case bool:
+			return t
+		case string:
+			return t == "true" || t == "1" || strings.EqualFold(t, "yes")
+		case int32:
+			return t != 0
+		case int64:
+			return t != 0
+		case float64:
+			return t != 0
+		default:
+			return false
+		}
+	}
+	toInt := func(v any) int {
+		switch t := v.(type) {
+		case int:
+			return t
+		case int32:
+			return int(t)
+		case int64:
+			return int(t)
+		case float64:
+			return int(t)
+		case string:
+			if n, e := strconv.Atoi(t); e == nil {
+				return n
+			}
+		}
+		return 0
+	}
+	toInt64 := func(v any) int64 {
+		switch t := v.(type) {
+		case int64:
+			return t
+		case int32:
+			return int64(t)
+		case int:
+			return int64(t)
+		case float64:
+			return int64(t)
+		case string:
+			if n, e := strconv.ParseInt(t, 10, 64); e == nil {
+				return n
+			}
+		}
+		return 0
+	}
+	toStr := func(v any) string {
+		if v == nil {
+			return ""
+		}
+		if s, ok := v.(string); ok {
+			return s
+		}
+		return fmt.Sprintf("%v", v)
+	}
+
+	results := make([]v2XcashDpopsUnauthorizedDelegatesBasicData, 0, 64)
+
+	for dcur.Next(ctx) {
+		var m bson.M
+		if err := dcur.Decode(&m); err != nil {
+			continue
+		}
+
+		pub := toStr(m["public_address"])
+		agg := vmap[pub] // zero value if not present
+
+		// If no reserve_proofs yet, fall back to delegate's total_vote_count for Votes
+		votes := agg.votes
+		if votes == 0 {
+			votes = toInt64(m["total_vote_count"])
+		}
+
+		res := v2XcashDpopsUnauthorizedDelegatesBasicData{
+			Votes:                    votes,
+			Voters:                   agg.voters, // 0 if none found
+			IPAdress:                 toStr(m["IP_address"]),
+			DelegateName:             toStr(m["delegate_name"]),
+			DelegateType:             toStr(m["delegate_type"]),
+			Online:                   toBool(m["online_status"]),
+			Fee:                      toInt(m["delegate_fee"]),
+			TotalRounds:              0, // need per-delegate stats to fill
+			TotalBlockProducerRounds: 0, // need per-delegate stats to fill
+			OnlinePercentage:         0, // need per-delegate stats to fill
+		}
+		results = append(results, res)
+	}
+	if err := dcur.Err(); err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "delegates cursor error"})
+	}
+
+	return c.JSON(results)
+}
