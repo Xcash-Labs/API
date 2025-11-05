@@ -281,7 +281,7 @@ type V2daemonGetHeight struct {
 
 // XCASH DPOPS
 
-type v1XcashDpopsUnauthorizedStats struct {
+type v2XcashDpopsUnauthorizedStats struct {
 	MostTotalRoundsDelegateName                   string `json:"mostTotalRoundsDelegateName"`
 	MostTotalRounds                               int    `json:"mostTotalRounds"`
 	BestBlockVerifierOnlinePercentageDelegateName string `json:"bestBlockVerifierOnlinePercentageDelegateName"`
