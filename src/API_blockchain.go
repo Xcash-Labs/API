@@ -76,7 +76,7 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	out.Reward = block.Result.BlockHeader.Reward // (int64)
 	out.Time = block.Result.BlockHeader.Timestamp // (int)
 	out.XcashDPOPS = xcashDPOPS
-	out.Tx = txHashes
+	out.TxHashes = txHashes
 
 	return c.JSON(out)
 }
