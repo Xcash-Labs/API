@@ -15,7 +15,7 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 		reqHeightStr = strings.TrimSpace(c.Params("blockHeight"))
 	)
 
-	// Also allow query (?blockHeight= or ?height=)
+	// Also allow query
 	if reqHeightStr == "" {
 		reqHeightStr = strings.TrimSpace(c.Query("blockHeight"))
 	}
