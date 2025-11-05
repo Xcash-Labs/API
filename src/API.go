@@ -79,10 +79,10 @@ func main() {
 
 	// setup xcash dpops routes
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
-	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegatename/", v2_xcash_dpops_unauthorized_delegates)
-	app.Get("/v2/xcash/dpops/unauthorized/delegates/votes/:delegatename", v2_xcash_dpops_unauthorized_delegates_votes)
+	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegateName/", v2_xcash_dpops_unauthorized_delegates)
+	app.Get("/v2/xcash/dpops/unauthorized/delegates/votes/:delegateName", v2_xcash_dpops_unauthorized_delegates_votes)
 	app.Get("/v2/xcash/dpops/unauthorized/votes/:address", v2_xcash_dpops_unauthorized_votes)
-	app.Get("/v2/xcash/dpops/unauthorized/rounds/:blockheight", v2_xcash_dpops_unauthorized_rounds)
+	app.Get("/v2/xcash/dpops/unauthorized/rounds/:blockHeight", v2_xcash_dpops_unauthorized_rounds)
 
 	// setup xpayment twitter routes
 	app.Get("/v1/xpayment-twitter/twitter/unauthorized/stats/", v1_xpayment_twitter_unauthorized_stats)

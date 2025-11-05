@@ -598,11 +598,6 @@ func v2_xcash_dpops_unauthorized_votes(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-
-
-
-
-
 func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
