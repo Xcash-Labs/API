@@ -9,7 +9,7 @@ import (
 
 // Handlers
 
-ffunc v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
+func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 	var (
 		out          v2XcashBlockchainUnauthorizedBlocksBlockHeight
 		reqHeightStr = strings.TrimSpace(c.Params("blockHeight"))
