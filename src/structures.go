@@ -274,6 +274,11 @@ type v2XcashBlockchainUnauthorizedBlocksBlockHeight struct {
 	TxHashes     []string `json:"tx"`
 }
 
+type V2daemonGetHeight struct {
+	Height int    `json:"height"`
+	Status string `json:"status"`
+}
+
 // XCASH DPOPS
 
 type v1XcashDpopsUnauthorizedStats struct {

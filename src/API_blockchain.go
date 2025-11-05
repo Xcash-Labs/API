@@ -80,3 +80,20 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 
 	return c.JSON(out)
 }
+
+func v2_xcash_blockchain_unauthorized_height(c *fiber.Ctx) error {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:18081/get_height")
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "daemon unreachable"})
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var gh v2daemonGetHeight
+	if err := json.Unmarshal(body, &gh); err != nil || gh.Status != "OK" || gh.Height <= 0 {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "invalid daemon response"})
+	}
+
+	return c.JSON(fiber.Map{"height": gh.Height})
+}
