@@ -4,9 +4,7 @@ package main
 
 // Blockchain data
 
-const CURRENT_BLOCKCHAIN_VERSION = 13
-const CURRENT_BLOCKCHAIN_VERSION_HEIGHT = 800000
-const NEXT_BLOCKCHAIN_VERSION_HEIGHT = 0
+
 const XCASH_PROOF_OF_STAKE_BLOCK_HEIGHT = 2
 
 // 6 decimal places atomic values
