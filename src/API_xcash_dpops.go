@@ -295,6 +295,184 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
+// v2_xcash_dpops_unauthorized_delegate_voters returns the voter list for a delegate.
+// It resolves delegateName -> public_address, then fetches reserve_proofs for that delegate
+// and returns voter address (_id), total_vote, and percent of delegate total votes.
+//
+// Route:
+//   GET /v2/xcash/dpops/unauthorized/delegates/:delegateName/voters?limit=100&skip=0
+func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
+
+	delegateName := c.Params("delegateName")
+	if strings.TrimSpace(delegateName) == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// Optional paging
+	limit := int64(100)
+	skip := int64(0)
+
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			if n < 1 {
+				n = 1
+			}
+			if n > 1000 {
+				n = 1000
+			}
+			limit = n
+		}
+	}
+	if v := strings.TrimSpace(c.Query("skip")); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			if n < 0 {
+				n = 0
+			}
+			skip = n
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := mongoClient.Database(XCASH_DPOPS_DATABASE)
+	colDelegates := db.Collection("delegates")
+	colProofs := db.Collection("reserve_proofs")
+
+	// 1) Load delegate public_address + stored total_vote_count (fallback)
+	var d bson.M
+	delegateProj := options.FindOne().SetProjection(bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "delegate_name", Value: 1},
+		{Key: "public_address", Value: 1},
+		{Key: "total_vote_count", Value: 1},
+	})
+	if err := colDelegates.FindOne(
+		ctx,
+		bson.D{{Key: "delegate_name", Value: delegateName}},
+		delegateProj,
+	).Decode(&d); err != nil {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	pubAddr := asString(d["public_address"])
+	if pubAddr == "" {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// 2) Compute delegate total votes:
+	// Prefer summing reserve_proofs (exact for current proofs), fallback to stored total_vote_count.
+	totalVotes := int64(0)
+	totalVoters := int64(0)
+
+	{
+		p := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"public_address_voted_for": pubAddr}}},
+			{{
+				Key: "$group",
+				Value: bson.D{
+					{Key: "_id", Value: "$public_address_voted_for"},
+					{Key: "voters", Value: bson.D{{Key: "$sum", Value: 1}}},
+					{Key: "sumVotes", Value: bson.D{{Key: "$sum", Value: "$total_vote"}}},
+				},
+			}},
+			{{Key: "$limit", Value: 1}},
+		}
+		if cur, err := colProofs.Aggregate(ctx, p); err == nil {
+			var rows []bson.M
+			_ = cur.All(ctx, &rows)
+			_ = cur.Close(ctx)
+			if len(rows) == 1 {
+				totalVoters = toInt64(rows[0]["voters"])
+				totalVotes = toInt64(rows[0]["sumVotes"])
+			}
+		}
+
+		if totalVotes <= 0 {
+			totalVotes = toInt64(d["total_vote_count"])
+		}
+		if totalVoters < 0 {
+			totalVoters = 0
+		}
+	}
+
+	// 3) Query voter docs for delegate
+	findOpts := options.Find().
+		SetProjection(bson.D{
+			{Key: "_id", Value: 1},       // voter public address
+			{Key: "total_vote", Value: 1},
+			{Key: "reserve_proof", Value: 0}, // keep response small
+		}).
+		SetSort(bson.D{{Key: "total_vote", Value: -1}}).
+		SetLimit(limit).
+		SetSkip(skip)
+
+	cur, err := colProofs.Find(ctx, bson.D{{Key: "public_address_voted_for", Value: pubAddr}}, findOpts)
+	if err != nil {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+	defer func() { _ = cur.Close(ctx) }()
+
+	type voterRow struct {
+		Address    string `json:"address"`
+		TotalVotes int64  `json:"total_votes"`
+		Percent    int    `json:"percent"` // percent as integer (0..100). Change to float if you want decimals.
+	}
+
+	voters := make([]voterRow, 0, int(limit))
+	for cur.Next(ctx) {
+		var doc bson.M
+		if err := cur.Decode(&doc); err != nil {
+			continue
+		}
+
+		addr := asString(doc["_id"])
+		v := toInt64(doc["total_vote"])
+		if addr == "" || v < 0 {
+			continue
+		}
+
+		// percent = (v / totalVotes) * 100
+		pct := 0
+		if totalVotes > 0 && v > 0 {
+			// Rounded percent (integer). If you want 2 decimals, compute float64 and format.
+			pct = int((v * 100) / totalVotes)
+			if pct < 0 {
+				pct = 0
+			}
+			if pct > 100 {
+				pct = 100
+			}
+		}
+
+		voters = append(voters, voterRow{
+			Address:    addr,
+			TotalVotes: v,
+			Percent:    pct,
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return c.JSON(ErrorResults{"Could not get the delegates data"})
+	}
+
+	// 4) Response
+	return c.JSON(fiber.Map{
+		"status":                "success",
+		"delegate_name":         asString(d["delegate_name"]),
+		"delegate_public_addr":  pubAddr,
+		"total_votes":           totalVotes,
+		"total_voters":          totalVoters,
+		"limit":                limit,
+		"skip":                 skip,
+		"count":                len(voters),
+		"voters":               voters,
+	})
+}
+
 func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
