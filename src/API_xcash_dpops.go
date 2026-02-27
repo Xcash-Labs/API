@@ -402,8 +402,6 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 		}
 	}
 
-	colProofs.Find(ctx, filter, opts)
-
 	// 3) Query voter docs for delegate
 	findOpts := options.Find().
 		SetProjection(bson.D{
