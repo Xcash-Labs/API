@@ -78,6 +78,10 @@ func main() {
 	app.Get("/v2/xcash/blockchain/unauthorized/height/", v2_xcash_blockchain_unauthorized_height)
 
 	// setup xcash dpops routes
+
+	fmt.Println("URL:", c.OriginalURL())
+	fmt.Println("Params:", c.AllParams())
+
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegateName", v2_xcash_dpops_unauthorized_delegates)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/votes/:delegateName", v2_xcash_dpops_unauthorized_delegates_votes)
