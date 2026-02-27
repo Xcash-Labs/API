@@ -81,7 +81,7 @@ func main() {
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/registered/", v2_xcash_dpops_unauthorized_delegates_registered)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegateName", v2_xcash_dpops_unauthorized_delegates)
 	app.Get("/v2/xcash/dpops/unauthorized/delegates/votes/:delegateName", v2_xcash_dpops_unauthorized_delegates_votes)
-	app.Get("/v2/xcash/dpops/unauthorized/delegates/voters/:delegateName", v2_xcash_dpops_unauthorized_delegate_voters)
+	app.Get("/v2/xcash/dpops/unauthorized/delegates/:delegateName/voters", v2_xcash_dpops_unauthorized_delegate_voters,)
 	app.Get("/v2/xcash/dpops/unauthorized/votes/:address", v2_xcash_dpops_unauthorized_votes)
 	app.Get("/v2/xcash/dpops/unauthorized/rounds/:blockHeight", v2_xcash_dpops_unauthorized_rounds)
 
