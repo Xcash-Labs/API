@@ -311,7 +311,7 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 
 	delegateName := c.Params("delegateName")
 	if strings.TrimSpace(delegateName) == "" {
-		return c.JSON(ErrorResults{"Could not get the delegates data"})
+		return c.JSON(ErrorResults{"Could not get the delegates data for function"})
 	}
 
 	// Optional paging
@@ -358,12 +358,12 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 		bson.D{{Key: "delegate_name", Value: delegateName}},
 		delegateProj,
 	).Decode(&d); err != nil {
-		return c.JSON(ErrorResults{"Could not get the delegates data"})
+		return c.JSON(ErrorResults{"Could not get the delegates name"})
 	}
 
 	pubAddr := asString(d["public_address"])
 	if pubAddr == "" {
-		return c.JSON(ErrorResults{"Could not get the delegates data"})
+		return c.JSON(ErrorResults{"Could not get the delegates pubAddr"})
 	}
 
 	// 2) Compute delegate total votes:
@@ -415,7 +415,7 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 
 	cur, err := colProofs.Find(ctx, bson.D{{Key: "public_address_voted_for", Value: pubAddr}}, findOpts)
 	if err != nil {
-		return c.JSON(ErrorResults{"Could not get the delegates data"})
+		return c.JSON(ErrorResults{"Could not get the delegates voted for address"})
 	}
 	defer func() { _ = cur.Close(ctx) }()
 
