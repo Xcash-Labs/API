@@ -26,13 +26,14 @@ func getDelegateKeysFromName(ctx context.Context, delegateName string) (string, 
 	}
 	col := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
 
-	// Only fetch the fields we need
-	proj := bson.D{
-		{Key: "_id", Value: 0},
-		{Key: "public_address", Value: 1},
-		{Key: "public_key", Value: 1},
-	}
-	opts := options.FindOne().SetProjection(proj)
+	findOpts := options.Find().
+	SetProjection(bson.D{
+		{Key: "_id", Value: 1},       // voter public address
+		{Key: "total_vote", Value: 1},
+	}).
+	SetSort(bson.D{{Key: "total_vote", Value: -1}}).
+	SetLimit(limit).
+	SetSkip(skip)
 
 	var doc bson.M
 	if err := col.FindOne(ctx, bson.D{{Key: "delegate_name", Value: delegateName}}, opts).Decode(&doc); err != nil {
