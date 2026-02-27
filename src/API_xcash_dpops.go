@@ -8,7 +8,6 @@ import (
     "errors" 
 	"time"
     "fmt"
-	"log"
 	"encoding/base64"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
@@ -26,14 +25,13 @@ func getDelegateKeysFromName(ctx context.Context, delegateName string) (string, 
 	}
 	col := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
 
-	findOpts := options.Find().
-	SetProjection(bson.D{
-		{Key: "_id", Value: 1},       // voter public address
-		{Key: "total_vote", Value: 1},
-	}).
-	SetSort(bson.D{{Key: "total_vote", Value: -1}}).
-	SetLimit(limit).
-	SetSkip(skip)
+	// Only fetch the fields we need
+	proj := bson.D{
+		{Key: "_id", Value: 0},
+		{Key: "public_address", Value: 1},
+		{Key: "public_key", Value: 1},
+	}
+	opts := options.FindOne().SetProjection(proj)
 
 	var doc bson.M
 	if err := col.FindOne(ctx, bson.D{{Key: "delegate_name", Value: delegateName}}, opts).Decode(&doc); err != nil {
@@ -404,12 +402,13 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 		}
 	}
 
+	colProofs.Find(ctx, filter, opts)
+
 	// 3) Query voter docs for delegate
 	findOpts := options.Find().
 		SetProjection(bson.D{
 			{Key: "_id", Value: 1},       // voter public address
 			{Key: "total_vote", Value: 1},
-			{Key: "reserve_proof", Value: 0}, // keep response small
 		}).
 		SetSort(bson.D{{Key: "total_vote", Value: -1}}).
 		SetLimit(limit).
@@ -417,9 +416,7 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 
 	cur, err := colProofs.Find(ctx, bson.D{{Key: "public_address_voted_for", Value: pubAddr}}, findOpts)
 	if err != nil {
-		log.Printf("delegate_voters: reserve_proofs Find failed delegate=%s pubAddr=%s err=%v",
-			delegateName, pubAddr, err)
-		return c.JSON(ErrorResults{"Could not get the delegates voted for address"})
+		return c.JSON(ErrorResults{"Could not get the delegates voted for"})
 	}
 	defer func() { _ = cur.Close(ctx) }()
 
