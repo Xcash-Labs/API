@@ -300,7 +300,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 // and returns voter address (_id), total_vote, and percent of delegate total votes.
 //
 // Route:
-//   GET /v2/xcash/dpops/unauthorized/delegates/:delegateName/voters?limit=100&skip=0
+//   GET /v2/xcash/dpops/unauthorized/delegates/voters/:delegateName?limit=100&skip=0
 func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
