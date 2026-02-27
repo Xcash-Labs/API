@@ -306,6 +306,9 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
 	}
 
+	fmt.Println("URL:", c.OriginalURL())
+	fmt.Println("Params:", c.AllParams())
+
 	delegateName := c.Params("delegateName")
 	if strings.TrimSpace(delegateName) == "" {
 		return c.JSON(ErrorResults{"Could not get the delegates data"})
