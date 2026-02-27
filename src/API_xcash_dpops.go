@@ -8,6 +8,7 @@ import (
     "errors" 
 	"time"
     "fmt"
+	"log"
 	"encoding/base64"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
@@ -415,6 +416,8 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 
 	cur, err := colProofs.Find(ctx, bson.D{{Key: "public_address_voted_for", Value: pubAddr}}, findOpts)
 	if err != nil {
+		log.Printf("delegate_voters: reserve_proofs Find failed delegate=%s pubAddr=%s err=%v",
+			delegateName, pubAddr, err)
 		return c.JSON(ErrorResults{"Could not get the delegates voted for address"})
 	}
 	defer func() { _ = cur.Close(ctx) }()
