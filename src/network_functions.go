@@ -52,3 +52,41 @@ func send_http_get(url string) (string, error) {
 	}
 	return string(b), nil
 }
+
+func sendTCPJSON(host string, port int, jsonReq string, timeout time.Duration) (string, error) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return "", fmt.Errorf("connect failed: %w", err)
+	}
+	defer conn.Close()
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+
+	// 1) send request JSON (NO length prefix)
+	if _, err := conn.Write([]byte(jsonReq)); err != nil {
+		return "", fmt.Errorf("write failed: %w", err)
+	}
+
+	// 2) read 4-byte big-endian response length
+	var hdr [4]byte
+	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
+		return "", fmt.Errorf("read prefix failed: %w", err)
+	}
+	n := binary.BigEndian.Uint32(hdr[:])
+	if n == 0 {
+		return "", fmt.Errorf("bad response length (0)")
+	}
+	if n > 4*1024*1024 { // safety cap (4MB)
+		return "", fmt.Errorf("response too large (%d bytes)", n)
+	}
+
+	// 3) read response body
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return "", fmt.Errorf("read body failed: %w", err)
+	}
+
+	return string(buf), nil
+}
