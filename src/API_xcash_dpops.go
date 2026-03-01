@@ -867,6 +867,10 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 }
 
 func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
+
 	delegateIPAddress := strings.TrimSpace(c.Params("delegateIPAddress"))
 	if delegateIPAddress == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -887,6 +891,125 @@ func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
 	}
 
 	// The delegate already returns JSON; just pass it through.
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	return c.SendString(resp)
+}
+
+
+func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
+	}
+
+	delegateIPAddress := strings.TrimSpace(c.Params("delegateIPAddress"))
+	if delegateIPAddress == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Missing delegateIPAddress",
+		})
+	}
+
+	// 1) Count delegates with this IP_address
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	coll := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
+	filter := bson.M{"IP_address": delegateIPAddress}
+
+	delegateCount, err := coll.CountDocuments(ctx, filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Failed to query delegates collection",
+		})
+	}
+
+	// 2) Ask delegate for payout info over raw TCP
+	req := `{"message_settings":"NODES_TO_NODES_PAYOUT_INFO"}`
+	resp, err := sendTCPJSON(delegateIPAddress, 18287, req, 10*time.Second)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	// 3) Inject delegate_count into the returned JSON
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(resp), &obj); err != nil {
+		// If the delegate returned non-JSON (e.g. "0|..."), return it as an error
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Delegate returned invalid JSON",
+			"raw":      resp,
+		})
+	}
+
+	obj["delegate_count"] = delegateCount
+	obj["delegate_ip"] = delegateIPAddress
+
+	out, _ := json.Marshal(obj)
+
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	return c.Send(out)
+}
+
+
+func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).
+			JSON(fiber.Map{"status": "error", "message": "database unavailable"})
+	}
+
+	delegateIPAddress := strings.TrimSpace(c.Params("delegateIPAddress"))
+	if delegateIPAddress == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Missing delegateIPAddress",
+		})
+	}
+
+	// --------------------------------------------------
+	// Validate delegate IP exists in delegates collection
+	// --------------------------------------------------
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	coll := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
+
+	filter := bson.M{
+		"IP_address": delegateIPAddress,
+	}
+
+	err := coll.FindOne(ctx, filter).Err()
+	if err != nil {
+	if err == mongo.ErrNoDocuments {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		"status":  "error",
+		"message": "Bad delegate IP",
+		})
+	}
+
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		"status":  "error",
+		"message": "Delegate IP no found",
+	})
+	}
+
+	// --------------------------------------------------
+	// Request payout info from delegate node
+	// --------------------------------------------------
+	req := `{"message_settings":"NODES_TO_NODES_PAYOUT_INFO"}`
+
+	resp, err := sendTCPJSON(delegateIPAddress, 18287, req, 10*time.Second)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	// Delegate already returns JSON → passthrough
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	return c.SendString(resp)
 }
