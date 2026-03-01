@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net"
 	"time"
 	"encoding/binary"
 	"fmt"
