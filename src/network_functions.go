@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"encoding/binary"
+	"fmt"
 )
 
 func send_http_data(url string, data string) (string, error) {
