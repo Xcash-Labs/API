@@ -868,35 +868,6 @@ func v2_xcash_dpops_unauthorized_rounds(c *fiber.Ctx) error {
 
 func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
 	if mongoClient == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "database unavailable"})
-	}
-
-	delegateIPAddress := strings.TrimSpace(c.Params("delegateIPAddress"))
-	if delegateIPAddress == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Missing delegateIPAddress",
-		})
-	}
-
-	req := `{"message_settings":"NODES_TO_NODES_PAYOUT_INFO"}`
-
-	// Call delegate over raw TCP (NOT HTTP)
-	resp, err := sendTCPJSON(delegateIPAddress, 18287, req, 10*time.Second)
-	if err != nil {
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
-			"status":  "error",
-			"message": err.Error(),
-		})
-	}
-
-	// The delegate already returns JSON; just pass it through.
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.SendString(resp)
-}
-
-func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
-	if mongoClient == nil {
 		return c.Status(fiber.StatusServiceUnavailable).
 			JSON(fiber.Map{"status": "error", "message": "database unavailable"})
 	}
