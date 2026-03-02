@@ -121,6 +121,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 		{Key: "IP_address", Value: 1},
 		{Key: "online_status", Value: 1},
 		{Key: "delegate_fee", Value: 1},
+		{Key: "minimum_payout", Value: 1},
 
 		// Fallbacks (only used if statistics doc missing—though we now hard-fail)
 		{Key: "block_verifier_total_rounds", Value: 1},
@@ -234,7 +235,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 
 		row := new(v2XcashDpopsUnauthorizedDelegatesBasicData)
 		row.DelegateName = asString(it["delegate_name"])
-		row.IPAdress = asString(it["IP_address"])
+		row.IPAddress = asString(it["IP_address"])
 		row.DelegateType = asString(it["delegate_type"])
 
 		switch v := it["online_status"].(type) {
@@ -247,6 +248,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 		}
 
 		row.Fee = int(toInt64(it["delegate_fee"]))
+		row.Minimum_payout = int(toInt64(it["minimum_payout"]))
 
 		// Votes
 		votes := toInt64(it["total_vote_count"])
@@ -613,7 +615,7 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	// fill fields
 	out.Votes         = totalVotes
 	out.Voters        = totalVoters
-	out.IPAdress      = asString(d["IP_address"])
+	out.IPAddress      = asString(d["IP_address"])
 	out.DelegateName  = asString(d["delegate_name"])
 	out.PublicAddress = pubAddr
 	out.About         = asString(d["about"])

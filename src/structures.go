@@ -284,11 +284,12 @@ type V2daemonGetHeight struct {
 type v2XcashDpopsUnauthorizedDelegatesBasicData struct {
 	Votes                    int64  `json:"votes"`
 	Voters                   int    `json:"voters"`
-	IPAdress                 string `json:"IPAdress"`
+	IPAddress                 string `json:"IPAddress"`
 	DelegateName             string `json:"delegateName"`
 	DelegateType           	 string `json:"DelegateType"`
 	Online                   bool   `json:"online"`
 	Fee                      int    `json:"fee"`
+	Minimum_payout           int    `json:"minimum_payout"`
 	TotalRounds              int    `json:"totalRounds"`
 	TotalBlockProducerRounds int    `json:"totalBlockProducerRounds"`
 	OnlinePercentage         int    `json:"onlinePercentage"`
@@ -297,7 +298,7 @@ type v2XcashDpopsUnauthorizedDelegatesBasicData struct {
 type v2XcashDpopsUnauthorizedDelegatesData struct {
 	Votes                    int64  `json:"votes"`
 	Voters                   int    `json:"voters"`
-	IPAdress                 string `json:"IPAdress"`
+	IPAddress                 string `json:"IPAddress"`
 	DelegateName             string `json:"delegateName"`
 	PublicAddress            string `json:"publicAddress"`
 	About                    string `json:"about"`
