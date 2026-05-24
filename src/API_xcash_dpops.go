@@ -247,7 +247,7 @@ func v2_xcash_dpops_unauthorized_delegates_registered(c *fiber.Ctx) error {
 			row.Online = false
 		}
 
-		row.Fee = int(toInt64(it["delegate_fee"]))
+		row.Fee = int(math.Round(toFloat64(it["delegate_fee"]) * 100))
 		row.Minimum_payout = int(toInt64(it["minimum_payout"]))
 
 		// Votes
@@ -615,7 +615,7 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	// fill fields
 	out.Votes         = totalVotes
 	out.Voters        = totalVoters
-	out.IPAddress      = asString(d["IP_address"])
+	out.IPAddress     = asString(d["IP_address"])
 	out.DelegateName  = asString(d["delegate_name"])
 	out.PublicAddress = pubAddr
 	out.About         = asString(d["about"])
@@ -623,7 +623,7 @@ func v2_xcash_dpops_unauthorized_delegates(c *fiber.Ctx) error {
 	out.Team          = asString(d["team"])
 	out.Specifications = asString(d["specifications"]) // or "server_specs" if that’s your field
 	out.DelegateType  = asString(d["delegate_type"])
-	out.Fee           = int(toInt64(d["delegate_fee"]))
+	out.Fee 		  = int(math.Round(toFloat64(d["delegate_fee"]) * 100))
 
 	verifierTotal  := toInt64(s["block_verifier_total_rounds"])
 	verifierOnline := toInt64(s["block_verifier_online_total_rounds"])
