@@ -9,6 +9,7 @@ import (
 	"time"
     "fmt"
 	"encoding/base64"
+	"math"
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -70,6 +71,34 @@ func toInt64(v any) int64 {
             return 0
         }
         return bi.Int64()
+    default:
+        return 0
+    }
+}
+
+func toFloat64(v any) float64 {
+    switch t := v.(type) {
+    case float64:
+        return t
+    case float32:
+        return float64(t)
+    case int64:
+        return float64(t)
+    case int32:
+        return float64(t)
+    case int:
+        return float64(t)
+    case string:
+        if n, err := strconv.ParseFloat(t, 64); err == nil {
+            return n
+        }
+        return 0
+    case primitive.Decimal128:
+        f, err := strconv.ParseFloat(t.String(), 64)
+        if err != nil {
+            return 0
+        }
+        return f
     default:
         return 0
     }
