@@ -449,7 +449,7 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 	type voterRow struct {
 		Address    string `json:"address"`
 		TotalVotes int64  `json:"total_votes"`
-		Percent    int    `json:"percent"` // percent as integer (0..100). Change to float if you want decimals.
+		Percent    int    `json:"percent"` // percent as integer (0..100)
 	}
 
 	voters := make([]voterRow, 0, int(limit))
@@ -465,16 +465,14 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 			continue
 		}
 
-		// percent = (v / totalVotes) * 100
 		pct := 0
 		if totalVotes > 0 && v > 0 {
-			// Rounded percent (integer). If you want 2 decimals, compute float64 and format.
-			pct = int((v * 100) / totalVotes)
+			pct = int((v * 10000) / totalVotes)    // Pass decimals as int
 			if pct < 0 {
 				pct = 0
 			}
-			if pct > 100 {
-				pct = 100
+			if pct > 10000 {
+				pct = 10000
 			}
 		}
 
