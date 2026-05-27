@@ -467,7 +467,7 @@ func v2_xcash_dpops_unauthorized_delegate_voters(c *fiber.Ctx) error {
 
 		pct := 0
 		if totalVotes > 0 && v > 0 {
-			pct = int((v * 10000) / totalVotes)    // Pass decimals as int
+			pct = int(math.Round((float64(v) * 10000) / float64(totalVotes)))    // Round and pass decimals as int
 			if pct < 0 {
 				pct = 0
 			}
