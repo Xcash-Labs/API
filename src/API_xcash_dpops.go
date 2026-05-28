@@ -953,3 +953,69 @@ func v2_xcash_dpops_unauthorized_payouts(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	return c.SendString(resp)
 }
+
+func v2_xcash_dpops_unauthorized_pay_pending(c *fiber.Ctx) error {
+	if mongoClient == nil {
+		return c.Status(fiber.StatusServiceUnavailable).
+			JSON(fiber.Map{
+				"status":  "error",
+				"message": "database unavailable",
+			})
+	}
+
+	delegateIPAddress := strings.TrimSpace(c.Params("delegateIPAddress"))
+	if delegateIPAddress == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Missing delegateIPAddress",
+		})
+	}
+
+	// --------------------------------------------------
+	// Validate delegate IP exists in delegates collection
+	// --------------------------------------------------
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	coll := mongoClient.Database(XCASH_DPOPS_DATABASE).Collection("delegates")
+
+	filter := bson.M{
+		"IP_address": delegateIPAddress,
+	}
+
+	err := coll.FindOne(ctx, filter).Err()
+	if err != nil {
+
+		if err == mongo.ErrNoDocuments {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Bad delegate IP",
+			})
+		}
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Delegate IP not found",
+		})
+	}
+
+	// --------------------------------------------------
+	// Request pending payout info from delegate node
+	// --------------------------------------------------
+
+	req := `{"message_settings":"NODES_TO_NODES_PAY_PENDING_INFO"}`
+
+	resp, err := sendTCPJSON(delegateIPAddress, 18287, req, 10*time.Second)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	// Delegate already returns JSON → passthrough
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+
+	return c.SendString(resp)
+}

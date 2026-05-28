@@ -86,6 +86,7 @@ func main() {
 	app.Get("/v2/xcash/dpops/unauthorized/votes/:address", v2_xcash_dpops_unauthorized_votes)
 	app.Get("/v2/xcash/dpops/unauthorized/rounds/:blockHeight", v2_xcash_dpops_unauthorized_rounds)
 	app.Get("/v2/xcash/dpops/unauthorized/payouts/:delegateIPAddress", v2_xcash_dpops_unauthorized_payouts)
+	app.Get("/v2/xcash/dpops/unauthorized/paypending/:delegateIPAddress", v2_xcash_dpops_unauthorized_pay_pending)
 
 	// setup xpayment twitter routes
 	app.Get("/v1/xpayment-twitter/twitter/unauthorized/stats/", v1_xpayment_twitter_unauthorized_stats)
