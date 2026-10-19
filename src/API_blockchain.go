@@ -87,18 +87,68 @@ func v2_xcash_blockchain_unauthorized_blocks_blockHeight(c *fiber.Ctx) error {
 }
 
 func v2_xcash_blockchain_unauthorized_height(c *fiber.Ctx) error {
-	dataSend, err := send_http_get("http://127.0.0.1:18281/get_height")
-	if err != nil {
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "daemon unreachable"})
-	}
 
-	var gh struct {
-		Height int    `json:"height"`
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal([]byte(dataSend), &gh); err != nil || gh.Status != "OK" || gh.Height <= 0 {
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "invalid daemon response"})
-	}
+    dataSend, err := send_http_get("http://127.0.0.1:18281/get_height")
+    if err != nil {
+        return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+            "error": "daemon unreachable",
+        })
+    }
 
-	return c.JSON(fiber.Map{"height": gh.Height})
+    var gh struct {
+        Height int64  `json:"height"`
+        Status string `json:"status"`
+    }
+
+    if err := json.Unmarshal([]byte(dataSend), &gh); err != nil ||
+        gh.Status != "OK" || gh.Height <= 0 {
+
+        return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{
+            "error": "invalid daemon response",
+        })
+    }
+
+    // Daemon height is the block count.
+    // Latest block height is therefore Height - 1.
+    latestBlockHeight := uint64(gh.Height - 1)
+
+    // Calculate estimated minted supply in atomic units.
+    supplyAtomic := calculateXcashSupply(latestBlockHeight)
+
+    // Convert atomic units to XCK.
+    supplyXCK := float64(supplyAtomic) / float64(xcashAtomicUnits)
+
+    return c.JSON(fiber.Map{
+        "height": gh.Height,
+        "supply": supplyXCK,
+    })
+}
+
+// calculateXcashSupply estimates the total minted supply
+// through the specified block height.
+//
+// Assumptions:
+// - Genesis supply is zero.
+// - Each block receives the full base reward.
+// - There are no block-weight reward penalties.
+// - The current emission rules applied from block 1.
+func calculateXcashSupply(blockHeight uint64) uint64 {
+    var generated uint64
+
+    for h := uint64(1); h <= blockHeight; h++ {
+        if generated >= xcashMoneySupply {
+            break
+        }
+
+        reward := (xcashMoneySupply - generated) >>
+            xcashEmissionSpeedFactor
+
+        if reward < xcashTailReward {
+            reward = xcashTailReward
+        }
+
+        generated += reward
+    }
+
+    return generated
 }
